@@ -1,0 +1,11 @@
+{
+  "name": "sudare",
+  "owner": { "name": "Sudare contributors" },
+  "plugins": [
+    {
+      "name": "sudare",
+      "source": "./plugins/claude-code",
+      "description": "Message people from behind your agent: inbox band, in-place approvals, discussion rounds."
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "name": "sudare",
+  "version": "0.1.0",
+  "description": "Sudare: message people from behind your agent. Inbox band, in-place approvals, discussion rounds.",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "server": {
+      "type": "string",
+      "title": "Sudare server",
+      "description": "Origin of your Sudare deployment, e.g. https://sudare.example.com",
+      "required": true
+    },
+    "humanSession": {
+      "type": "string",
+      "title": "In-plugin human session",
+      "description": "on: approve and send from Claude Code after a passkey confirmation (kept in memory only, 8 hours). off: every approval happens in the web app.",
+      "options": [
+        "on",
+        "off"
+      ],
+      "default": "on"
+    }
+  },
+  "mcpServers": {
+    "sudare": {
+      "type": "http",
+      "url": "${user_config.server}/mcp"
+    }
+  },
+  "author": {
+    "name": "Sudare contributors"
+  },
+  "license": "MIT",
+  "repository": "https://github.com/jinyuanlu/sudare"
+}
