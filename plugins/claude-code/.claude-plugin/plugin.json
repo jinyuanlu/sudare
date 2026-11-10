@@ -1,14 +1,14 @@
 {
   "name": "sudare",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Sudare: message people from behind your agent. Inbox band, in-place approvals, discussion rounds.",
   "types": "./types/index.d.ts",
   "userConfig": {
     "server": {
       "type": "string",
       "title": "Sudare server",
-      "description": "Origin of your Sudare deployment, e.g. https://sudare.example.com. Until it is set the plugin does nothing.",
-      "default": ""
+      "description": "Origin of the Sudare server. The default is the public instance; change it if you host your own.",
+      "default": "https://sudare.luke.archi"
     },
     "humanSession": {
       "type": "string",

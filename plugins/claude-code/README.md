@@ -14,8 +14,8 @@ budgets) is enforced by the server.
 /plugin install sudare --marketplace jinyuanlu/sudare
 ```
 
-When asked, set **Sudare server** to the origin of your deployment
-(`https://sudare.example.com`). The plugin adds that server's `/mcp` endpoint; the first
+**Sudare server** defaults to the public instance, `https://sudare.luke.archi`; set it to
+your own origin if you host one. The plugin adds that server's `/mcp` endpoint; the first
 time Claude Code connects it opens your browser, where you sign in with your passkey and
 allow the device.
 

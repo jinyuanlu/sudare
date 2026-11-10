@@ -15,8 +15,8 @@ sh scripts/deploy.sh https://sudare.example.com
 ```
 
 The script does sections 1 to 3 below (resources, private config, operator secret,
-migration, deploy) and prints the two steps left to you: attaching the domain and creating
-the first invitation link. Run it again without arguments to redeploy. The sections below
+migration, deploy), binds the host as a custom domain (its zone must be on the same
+Cloudflare account), and prints how to create the first invitation link. Run it again without arguments to redeploy. The sections below
 are the same thing by hand.
 
 ## 1. Create the resources
