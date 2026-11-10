@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.wrangler/
+.dev.vars
+packages/server/public/
+*.log
+spec/states/
+spec/*.out
+spec/tla2tools.jar
+test-results/
+.claude-plugin/types/
+plugins/*/.claude-plugin/types/

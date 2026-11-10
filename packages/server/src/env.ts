@@ -1,0 +1,30 @@
+import type { OAuthHelpers } from '@cloudflare/workers-oauth-provider'
+import type { ConversationDO } from './do/conversation'
+import type { PrincipalDO } from './do/principal'
+
+export type Env = {
+  CONVERSATION: DurableObjectNamespace<ConversationDO>
+  PRINCIPAL: DurableObjectNamespace<PrincipalDO>
+  DB: D1Database
+  OAUTH_KV: KVNamespace
+  ASSETS: Fetcher
+  OAUTH_PROVIDER: OAuthHelpers
+  PUBLIC_ORIGIN: string
+  ALLOWED_REDIRECT_ORIGINS: string
+  ROUND_CLIENT_IDS: string
+  PLUGIN_HUMAN_SESSION: string
+  WEB_SESSION_HOURS: string
+  PLUGIN_SESSION_HOURS: string
+  VAPID_SUBJECT: string
+  VAPID_PUBLIC_KEY: string
+  VAPID_PRIVATE_KEY?: string
+  ADMIN_SECRET?: string
+}
+
+export const origin = (env: Env): string => env.PUBLIC_ORIGIN.replace(/\/+$/, '')
+export const csv = (value: string | undefined): string[] =>
+  (value ?? '').split(',').map((s) => s.trim()).filter(Boolean)
+export const hours = (value: string | undefined, fallback: number): number => {
+  const n = Number(value)
+  return Number.isFinite(n) && n > 0 ? n : fallback
+}
