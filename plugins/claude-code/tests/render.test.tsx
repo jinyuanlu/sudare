@@ -59,7 +59,7 @@ test('signed in: the band shows what is waiting and the panel shows the conversa
   on('state.get', (_, e) => ({ value: { value: STATE[e.key], version: 1 } }))
   for (const surface of SURFACES) {
     const band = await $.ui.mount({ ...BAND, surface })
-    for (const key of ['reply', 'agent', 'item-done', 'approve', 'reject', 'join', 'seat']) expect(await band.find({ key })).toBeDefined()
+    for (const key of ['open', 'reply', 'agent', 'item-done', 'approve', 'reject', 'join', 'seat']) expect(await band.find({ key })).toBeDefined()
     await band.unmount()
 
     const pane = await $.ui.mount({ ...PANE, surface })

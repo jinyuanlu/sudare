@@ -532,13 +532,17 @@ export const register: Register = (on, options) => {
     }
 
     const many = snap.convs.length > 1
+    const shownNote = note && !note.startsWith('Invitation link') ? note : null
+    const first = shownNote ? 'note' : item ? 'item' : draft ? 'draft' : invite ? 'invite' : 'seat'
+    const open = <Button key="open" label="Open" onPress={() => $.ui.open({ id: PANE, title: 'Sudare' })} />
     const where = (t: string) => (many ? ` in ${clip(t, 24)}` : '')
     return (
       <Box flexDirection="column">
-        {note && !note.startsWith('Invitation link') && (
+        {shownNote && (
           <Box gap={2}>
-            <Text dimColor>{note}</Text>
+            <Text dimColor>{shownNote}</Text>
             <Button key="clear" label="Dismiss" onPress={() => update($, notice, () => null)} />
+            {first === 'note' && open}
           </Box>
         )}
         {item && (
@@ -547,6 +551,7 @@ export const register: Register = (on, options) => {
             <Button key="reply" label="Reply" onPress={() => replyTo($, c, item)} />
             <Button key="agent" label="Ask Claude" onPress={() => handOff($, c, item, 'readonly')} />
             <Button key="item-done" label="Done" onPress={() => post($, c, `/inbox/${item.msg}/done`, {}, 'Done.')} />
+            {first === 'item' && open}
           </Box>
         )}
         {draft && (
@@ -555,6 +560,7 @@ export const register: Register = (on, options) => {
             <Button key="approve" variant="primary" label={draft.status === 'approving' ? 'Retry' : 'Send'} onPress={() => post($, c, `/drafts/${draft.id}/approve`, {}, 'Sent.')} />
             <Button key="edit" label="Edit" onPress={() => $.ui.open({ id: PANE, title: 'Sudare' })} />
             <Button key="reject" label="Discard" onPress={() => post($, c, `/drafts/${draft.id}/reject`, {}, 'Discarded.')} />
+            {first === 'draft' && open}
           </Box>
         )}
         {invite && (
@@ -562,12 +568,14 @@ export const register: Register = (on, options) => {
             <Text><Text bold>{invite.by}</Text> invites you to <Text bold>{clip(invite.topic, 40)}</Text></Text>
             <Button key="join" label="Join" onPress={() => post($, c, `/invites/${invite.id}/accept`, {}, `Joined "${invite.topic}".`)} />
             <Button key="decline" label="Decline" onPress={() => post($, c, `/invites/${invite.id}/decline`, {}, 'Declined.')} />
+            {first === 'invite' && open}
           </Box>
         )}
         {seat && (
           <Box gap={2}>
             <Text><Text dimColor>Discussion{where(seat.topic)}:</Text>  {clip(seat.goal, 60)}</Text>
             <Button key="seat" label="Start my agent" onPress={() => startRound($, seat)} />
+            {first === 'seat' && open}
           </Box>
         )}
       </Box>
