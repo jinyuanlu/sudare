@@ -18,11 +18,24 @@ pnpm wrangler d1 create sudare
 pnpm wrangler kv namespace create OAUTH_KV
 ```
 
-Put the two ids into `wrangler.jsonc` (`d1_databases[0].database_id`, `kv_namespaces[0].id`).
+This repository is public, so keep your real deployment values out of the tracked
+`wrangler.jsonc`. Work on a private copy, which is gitignored:
+
+```bash
+cp wrangler.jsonc wrangler.deploy.jsonc
+```
+
+```bash
+export SUDARE_CONFIG=wrangler.deploy.jsonc
+```
+
+Put the two ids into `wrangler.deploy.jsonc` (`d1_databases[0].database_id`,
+`kv_namespaces[0].id`). The `deploy` and `migrate` scripts read `SUDARE_CONFIG`; pass
+`--config wrangler.deploy.jsonc` to any other `wrangler` command you run by hand.
 
 ## 2. Configure
 
-In `wrangler.jsonc` → `vars`:
+In `wrangler.deploy.jsonc` → `vars`:
 
 | Variable | Meaning |
 | --- | --- |
@@ -36,7 +49,7 @@ In `wrangler.jsonc` → `vars`:
 Secrets:
 
 ```bash
-pnpm wrangler secret put ADMIN_SECRET
+pnpm wrangler secret put ADMIN_SECRET --config wrangler.deploy.jsonc
 ```
 
 Use at least 24 random characters. It does two things only: creates the first invitation
@@ -49,7 +62,7 @@ pnpm gen:vapid
 ```
 
 ```bash
-pnpm wrangler secret put VAPID_PRIVATE_KEY
+pnpm wrangler secret put VAPID_PRIVATE_KEY --config wrangler.deploy.jsonc
 ```
 
 ## 3. Migrate and deploy

@@ -6,7 +6,7 @@ FSL-1.1-MIT
 
 ## Notice
 
-Copyright 2026 Sudare contributors
+Copyright 2026 jinyuanlu
 
 ## Terms and Conditions
 

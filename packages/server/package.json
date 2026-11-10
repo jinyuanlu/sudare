@@ -5,9 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
+    "deploy": "wrangler deploy --config ${SUDARE_CONFIG:-wrangler.jsonc}",
     "migrate:local": "wrangler d1 migrations apply sudare --local",
-    "migrate": "wrangler d1 migrations apply sudare --remote",
+    "migrate": "wrangler d1 migrations apply sudare --remote --config ${SUDARE_CONFIG:-wrangler.jsonc}",
     "typecheck": "tsc -p .",
     "test": "vitest run"
   },

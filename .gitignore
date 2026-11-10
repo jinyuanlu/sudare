@@ -10,3 +10,4 @@ spec/tla2tools.jar
 test-results/
 .claude-plugin/types/
 plugins/*/.claude-plugin/types/
+packages/server/wrangler.deploy.jsonc
