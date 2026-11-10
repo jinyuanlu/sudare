@@ -4,6 +4,21 @@ One Worker, two Durable Object classes, one D1 database, one KV namespace. Worke
 is assumed (the free tier's daily Durable Object write limit is too tight; see the
 architecture spec, section 9).
 
+## The short way
+
+```bash
+pnpm wrangler login
+```
+
+```bash
+sh scripts/deploy.sh https://sudare.example.com
+```
+
+The script does sections 1 to 3 below (resources, private config, operator secret,
+migration, deploy) and prints the two steps left to you: attaching the domain and creating
+the first invitation link. Run it again without arguments to redeploy. The sections below
+are the same thing by hand.
+
 ## 1. Create the resources
 
 ```bash
