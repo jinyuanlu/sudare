@@ -115,6 +115,13 @@ export const LinkScreen = ({ id }: { id: string }) => {
   const info = useLoad(() => api.link(id), [id])
   const act = useAction()
   const [done, setDone] = useState(false)
+  const confirm = () => void act.run(async () => { await confirmLink(id); setDone(true) })
+  // Ask for the passkey as soon as the page is ready: one touch and it is done. Browsers
+  // that insist on a click first refuse this quietly, and the button below still works.
+  const ready = info.data !== undefined && !info.data.confirmed
+  useEffect(() => {
+    if (ready) confirm()
+  }, [ready])
   const body = () => {
     if (done || info.data?.confirmed) return <p class="ok" role="status">{t('link.done')}</p>
     if (info.error) return isCode(info.error, 'not_found') ? <p class="error" role="alert">{t('link.missing')}</p> : <ErrorNote error={info.error} />
@@ -125,7 +132,7 @@ export const LinkScreen = ({ id }: { id: string }) => {
         <p class="code" aria-label={t('link.code')}>{info.data.code}</p>
         <p class="warn">{t('link.warning')}</p>
         <p class="muted small">{t('common.expires', { when: fmtDate(info.data.expires) })}</p>
-        <button type="button" class="primary big" disabled={act.busy} onClick={() => void act.run(async () => { await confirmLink(id); setDone(true) })}>
+        <button type="button" class="primary big" disabled={act.busy} onClick={confirm}>
           {t('link.confirm')}
         </button>
         {isCode(act.error, 'not_found') ? <p class="error" role="alert">{t('link.missing')}</p> : <ErrorNote error={act.error} />}
