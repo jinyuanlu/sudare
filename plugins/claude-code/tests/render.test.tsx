@@ -11,6 +11,9 @@ const PANE = {
 
 const STATE: Record<string, unknown> = {
   isSignedIn: true,
+  isConnected: true,
+  isNew: false,
+  isKept: false,
   current: 'c1',
   link: null,
   notice: null,
@@ -34,11 +37,21 @@ const STATE: Record<string, unknown> = {
   },
 }
 
-test('signed out: the band offers one button, on every surface', OPTIONS, async ($) => {
+test('first run shows one step at a time: connect, then sign in', OPTIONS, async ($, on) => {
+  let isConnected = false
+  on('state.get', (_, e) => ({ value: { value: e.key === 'isConnected' ? isConnected : e.key === 'isNew' ? true : undefined, version: 1 } }))
   for (const surface of SURFACES) {
-    const ui = await $.ui.mount({ ...BAND, surface })
-    expect(await ui.find({ key: 'signin' })).toBeDefined()
-    await ui.unmount()
+    isConnected = false
+    const one = await $.ui.mount({ ...BAND, surface })
+    expect(await one.find({ type: 'Text', text: /step 1 of 2/ })).toBeDefined()
+    expect(await one.find({ key: 'signin' })).toBeUndefined()
+    await one.unmount()
+    isConnected = true
+    const two = await $.ui.mount({ ...BAND, surface })
+    expect(await two.find({ type: 'Text', text: /step 2 of 2/ })).toBeDefined()
+    expect(await two.find({ key: 'signin' })).toBeDefined()
+    expect(await two.find({ key: 'signin-keep' })).toBeDefined()
+    await two.unmount()
   }
 })
 
@@ -46,7 +59,7 @@ test('signed in: the band shows what is waiting and the panel shows the conversa
   on('state.get', (_, e) => ({ value: { value: STATE[e.key], version: 1 } }))
   for (const surface of SURFACES) {
     const band = await $.ui.mount({ ...BAND, surface })
-    for (const key of ['reply', 'agent', 'approve', 'reject', 'join', 'seat']) expect(await band.find({ key })).toBeDefined()
+    for (const key of ['reply', 'agent', 'item-done', 'approve', 'reject', 'join', 'seat']) expect(await band.find({ key })).toBeDefined()
     await band.unmount()
 
     const pane = await $.ui.mount({ ...PANE, surface })

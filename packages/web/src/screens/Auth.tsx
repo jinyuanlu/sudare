@@ -140,5 +140,5 @@ export const LinkScreen = ({ id }: { id: string }) => {
       </>
     )
   }
-  return <Solo title={t('link.title')}>{body()}</Solo>
+  return <Solo title={t(done || info.data?.confirmed ? 'link.doneTitle' : 'link.title')}>{body()}</Solo>
 }

@@ -19,6 +19,10 @@ const current = atom({ plugin: 'sudare', key: 'current' } as const, null)
 const timeline = atom({ plugin: 'sudare', key: 'timeline' } as const, null)
 /** The "new conversation" form in the panel: open or not, and who is ticked. */
 const compose = atom({ plugin: 'sudare', key: 'compose' } as const, { isOpen: false, people: [] })
+/** Whether the agent connection (the /mcp step) is in place: sign-in cannot start without it. */
+const connected = atom({ plugin: 'sudare', key: 'isConnected' } as const, false)
+/** True until the person has signed in once on this computer: the first run counts its steps aloud. */
+const firstRun = atom({ plugin: 'sudare', key: 'isNew' } as const, false)
 /** Whether the person chose to stay signed in on this machine. */
 const kept = atom({ plugin: 'sudare', key: 'isKept' } as const, false)
 /** The short explanation at the top of the panel, shown until the person says they have it. */
@@ -88,6 +92,7 @@ const loadTimeline = async (c: Client, conv: string, isSeen: boolean): Promise<S
 
 // The position in the person's inbox log this session has seen. Module state: a reload starts over, which only costs one refetch.
 let cursor = 0
+let waiting: { cancel: () => unknown } | null = null
 let ticks = 0
 
 function say($: Engine, text: string) {
@@ -108,8 +113,24 @@ async function refresh($: Engine, c: Client, isSeen = false): Promise<void> {
 }
 
 /** Poll the person's inbox log; only refetch the lists when it moved. */
+/** Is the agent connection there? Asked while signed out, so the line can move from step 1 to step 2 by itself. */
+async function probe($: Engine, c: Client): Promise<void> {
+  const r = await c.tool('inbox').catch(() => ({ ok: false }))
+  await update($, connected, () => r.ok)
+}
+
+async function cancelSignIn($: Engine): Promise<void> {
+  waiting?.cancel()
+  waiting = null
+  await update($, link, () => null)
+  await update($, notice, () => null)
+}
+
 async function tick($: Engine, c: Client): Promise<void> {
-  if (!isSignedIn()) return void (await update($, signedIn, () => false))
+  if (!isSignedIn()) {
+    await probe($, c)
+    return void (await update($, signedIn, () => false))
+  }
   const r = await c.api('GET', `/sync?since=${cursor}`)
   if (!r.ok) return refresh($, c)
   const body = r.body as { cursor?: number; events?: unknown[] }
@@ -125,25 +146,33 @@ async function signIn($: Engine, c: Client, allowHuman: boolean): Promise<string
     return 'The in-plugin human session is turned off; approvals happen in the web app, which was opened.'
   }
   const begun = await c.beginSignIn()
-  if (!begun.ok) return `Sign-in could not start (${begun.error}). If Sudare is not connected yet: /mcp → sudare → Authenticate.`
+  if (!begun.ok) {
+    await update($, connected, () => false)
+    return `Not connected yet (${begun.error}).`
+  }
   const pending: SudareLink = { code: begun.code, url: begun.url }
   await update($, link, () => pending)
   const opened = await c.open(begun.url)
   const deadline = Date.now() + 5 * 60_000
+  waiting?.cancel()
   const wait = $.clock.every(2000, async () => {
     const state = Date.now() > deadline ? 'gone' : await c.finishSignIn(begun.link, begun.secret).catch(() => 'waiting' as const)
     if (state === 'waiting') return
     wait.cancel()
+    waiting = null
     await update($, link, () => null)
     if (state === 'confirmed') {
       cursor = 0
       await refresh($, c)
       await update($, notice, () => null)
       $.ui.toast('Sudare: signed in')
+      await update($, firstRun, () => false)
+      await $.store.set('signedInOnce', true).catch(() => undefined)
     } else {
-      await say($, 'Sign-in expired. Run /sudare signin to try again.')
+      await say($, 'That sign-in timed out. Choose again to retry.')
     }
   })
+  waiting = wait
   return opened ? `Check your browser: the code is ${begun.code}.` : `Open ${begun.url} (code ${begun.code}).`
 }
 
@@ -195,6 +224,7 @@ async function sayHere($: Engine, c: Client, conv: string, text: string, picked:
   const r = await c.api('POST', `/convs/${conv}/messages`, { id: newId(), text: body, to_handles: to })
   if (!r.ok && str((r.body as Json).error) === 'recipient_unknown') await c.api('POST', `/convs/${conv}/messages`, { id: newId(), text: body })
   else if (!r.ok) await say($, `Not sent: ${str((r.body as Json).error) || r.status}`)
+  if (r.ok) await update($, target, () => null) // the choice is for one message, not a mode
   await refresh($, c)
 }
 
@@ -250,6 +280,13 @@ async function inviteLink($: Engine, c: Client, conv: string, surface: 'terminal
   if (!r.ok || url === '') return void (await say($, `No link: ${str((r.body as Json).error) || r.status}`))
   const copied = await $.ui.copy({ text: url, surface }).catch(() => ({ isCopied: false }))
   await say($, `${copied.isCopied ? 'Invitation link copied' : 'Invitation link'} (works once, 7 days): ${url}`)
+}
+
+/** Reply in the panel with the sender already chosen, so a slip of the keyboard cannot send it to Claude instead. */
+async function replyTo($: Engine, c: Client, item: SudareItem): Promise<void> {
+  await openConv($, c, item.conv)
+  await update($, target, () => item.from)
+  await $.ui.open({ id: PANE, title: 'Sudare', focus: true })
 }
 
 async function handOff($: Engine, c: Client, item: SudareItem, mode: 'readonly' | 'full'): Promise<void> {
@@ -308,6 +345,8 @@ export const register: Register = (on, options) => {
       const isKeeping = await c.loadPreference().catch(() => false)
       await update($, kept, () => isKeeping)
       await c.restore().catch(() => undefined)
+      if ((await $.store.get('signedInOnce').catch(() => true)) !== true) await update($, firstRun, () => true)
+      if (!isSignedIn()) await probe($, c).catch(() => undefined)
       if ((await $.store.get('helpSeen').catch(() => true)) !== true) await update($, helpOpen, () => true)
       await refresh($, c)
     }
@@ -414,19 +453,29 @@ export const register: Register = (on, options) => {
     const c = makeClient($, server, keep)
     const [snap, pending, here, isIn, note, shown] = [await read($, snapshot), await read($, link), await read($, current), await read($, signedIn), await read($, notice), await read($, timeline)]
     const isKept = await read($, kept)
+    const [isLinked, isFirst] = [await read($, connected), await read($, firstRun)]
 
     if (pending) {
       return (
         <Box flexDirection="column">
-          <Text>Sudare · sign in from your browser. Code: <Text bold>{pending.code}</Text></Text>
+          <Box gap={2}>
+            <Text>Sudare · confirm in your browser. Code <Text bold>{pending.code}</Text></Text>
+            <Button key="cancel-signin" plain label="cancel" onPress={() => cancelSignIn($)} />
+          </Box>
           <Text dimColor>{pending.url}</Text>
         </Box>
       )
     }
     if (!isIn) {
       return (
+        !isLinked ? (
+          <Box gap={2}>
+            <Text dimColor>Sudare · {isFirst ? 'step 1 of 2: ' : ''}connect your agent:</Text>
+            <Text>type /mcp, choose sudare, press Authenticate</Text>
+          </Box>
+        ) :
         <Box gap={2}>
-          <Text dimColor>Sudare · sign in for</Text>
+          <Text dimColor>Sudare · {isFirst ? 'step 2 of 2: ' : ''}sign in for</Text>
           <Button key="signin" label="this session" {...(!isKept ? { variant: 'primary' as const } : {})} onPress={() => signInFor($, server, keep, false, allowHuman)} />
           {allowHuman && <Button key="signin-keep" label="7 days on this computer" {...(isKept ? { variant: 'primary' as const } : {})} onPress={() => signInFor($, server, keep, true, allowHuman)} />}
           {note && <Text dimColor>{note}</Text>}
@@ -460,11 +509,9 @@ export const register: Register = (on, options) => {
         {item && (
           <Box gap={2}>
             <Text><Text bold>{item.from}</Text><Text dimColor>{where(item.topic)}</Text>  {clip(item.text, 80)}</Text>
-            <Button key="reply" label="Reply" onPress={async () => {
-              await update($, current, () => item.conv)
-              await $.prompt.fill({ text: `@${item.from} ` })
-            }} />
+            <Button key="reply" label="Reply" onPress={() => replyTo($, c, item)} />
             <Button key="agent" label="Ask Claude" onPress={() => handOff($, c, item, 'readonly')} />
+            <Button key="item-done" plain label="done" onPress={() => post($, c, `/inbox/${item.msg}/done`, {}, 'Done.')} />
           </Box>
         )}
         {draft && (
@@ -485,7 +532,7 @@ export const register: Register = (on, options) => {
         {seat && (
           <Box gap={2}>
             <Text><Text dimColor>Discussion{where(seat.topic)}:</Text>  {clip(seat.goal, 60)}</Text>
-            <Button key="seat" label="Let Claude join" onPress={() => startRound($, seat)} />
+            <Button key="seat" label="Start my agent" onPress={() => startRound($, seat)} />
           </Box>
         )}
       </Box>
@@ -532,7 +579,7 @@ export const register: Register = (on, options) => {
               <Text bold>{clip(shown.topic, 50)}</Text>
               <Text dimColor>{`  you are ${shown.me}`}{shown.others.length > 0 ? ` · ${shown.others.filter((o) => o.isHere).length} of ${shown.others.length} others here now` : ''}</Text>
             </Text>
-            {shown.others.length === 0 && <Text>Nobody else is here yet. Press Invite below, then open the copied link in a private browser window to add a second person.</Text>}
+            {shown.others.length === 0 && <Text>Nobody else is here yet. Press Invite and send the copied link to the person you want here.</Text>}
             {shown.others.length > 0 && shown.lines.length === 0 && <Text dimColor>Nobody has written yet. Write below; everyone here receives it.</Text>}
             {shown.lines.slice(-room).map((l) => (
               <Text>
@@ -569,20 +616,20 @@ export const register: Register = (on, options) => {
             ))}
           </Box>
         )}
-        {snap.drafts.length > 0 && <Text bold>Drafts waiting for you</Text>}
+        {snap.drafts.length > 0 && <Text bold>Replies your agent wrote</Text>}
         {snap.drafts.map((d) => (
           <Box key={`draft-${d.id}`} flexDirection="column">
             <Text dimColor>{d.device} · {d.kind}{d.topic ? ` · ${clip(d.topic, 30)}` : ''}</Text>
-            <Input key={`edit-${d.id}`} value={d.text} rows={3} submitLabel="Allow" onSubmit={(text) => void post($, c, `/drafts/${d.id}/approve`, text === d.text ? {} : { text }, 'Approved and sent.')} />
-            <Button key={`reject-${d.id}`} label="Reject" onPress={() => post($, c, `/drafts/${d.id}/reject`, {}, 'Draft rejected.')} />
+            <Input key={`edit-${d.id}`} value={d.text} rows={3} submitLabel="Send" onSubmit={(text) => void post($, c, `/drafts/${d.id}/approve`, text === d.text ? {} : { text }, 'Sent.')} />
+            <Button key={`reject-${d.id}`} plain label="discard" onPress={() => post($, c, `/drafts/${d.id}/reject`, {}, 'Discarded.')} />
           </Box>
         ))}
-        {rounds.length > 0 && <Text bold>Open rounds you have not joined</Text>}
+        {rounds.length > 0 && <Text bold>Agent discussions you are not part of yet</Text>}
         {rounds.map((x) => (
           <Box key={`round-${x.round}`} flexDirection="column">
             <Text>{clip(x.topic, 40)}</Text>
-            <Input key={`brief-${x.round}`} label="Brief for your agent" placeholder="position, limits, what it may disclose" rows={3} submitLabel="Join round"
-              onSubmit={(brief) => void post($, c, `/rounds/${x.round}/join`, { brief }, 'Joined the round. Start your agent from the band.')} />
+            <Input key={`brief-${x.round}`} label="Instructions for my agent (only it sees this)" placeholder="what you want, where it may give way" rows={3} submitLabel="Take part with my agent"
+              onSubmit={(brief) => void post($, c, `/rounds/${x.round}/join`, { brief }, 'You are taking part. Press Start my agent above your prompt.')} />
           </Box>
         ))}
         {shown && form.isOpen && (

@@ -17,6 +17,7 @@ const engine = (on: Parameters<NonNullable<Parameters<typeof test>[2]>>[1], seen
     seen.deleted += 1
     return { value: undefined }
   })
+  on('mcp.call', () => ({ value: { content: [{ type: 'text', text: '{"messages":[],"rounds":[]}' }], isError: false } }))
   on('http.fetch', (_, e) => {
     seen.bearer.push(JSON.stringify(e))
     return { value: { status: 200, ok: true, headers: {}, text: '[]' } }

@@ -550,7 +550,7 @@ describe('devices and OAuth', () => {
     expect((await ann.get(`/link/${link}`)).status).toBe(404)
     expect((await ann.post(`/link/${link}/options`)).status).toBe(404)
 
-    expect((await bob.get(`/link/${link}`)).body).toMatchObject({ device: 'bob-agent', code: hash.slice(0, 6).toUpperCase() })
+    expect((await bob.get(`/link/${link}`)).body).toMatchObject({ device: 'bob-agent', code: hash.replace(/[^A-Za-z0-9]/g, '').slice(0, 6).toUpperCase() })
     const o = await bob.post(`/link/${link}/options`)
     const confirmed = await bob.post(`/link/${link}/confirm`, { id: o.body.id, response: await bob.passkey.get(o.body.options) })
     expect(confirmed.status).toBe(200)

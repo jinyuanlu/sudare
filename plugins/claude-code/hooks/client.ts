@@ -131,7 +131,7 @@ const parse = (text: string): Json | Json[] => {
     const started = await asPlugin(() => tool('human_session_start', { challenge, remember }))
     const body = started.body as { url?: string; link?: string; error?: string }
     if (!started.ok || !body.url || !body.link) return { ok: false, error: String(body.error ?? 'unexpected answer from the server').slice(0, 200) }
-    return { ok: true, code: challenge.slice(0, 6).toUpperCase(), url: body.url, link: body.link, secret }
+    return { ok: true, code: challenge.replace(/[^A-Za-z0-9]/g, '').slice(0, 6).toUpperCase(), url: body.url, link: body.link, secret }
   }
 
   /** True once the person confirmed; from then on the secret is a bearer token. */

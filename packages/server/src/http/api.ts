@@ -192,7 +192,7 @@ api.get('/link/:id', web, async (c) => {
   // A link started by someone else's device is indistinguishable from one that does not exist.
   if (row.principal !== me(c)) return fail('not_found')
   const device = await directory(c.env).device(row.device)
-  return c.json({ device: device?.name ?? 'unknown', code: row.challenge.slice(0, 6).toUpperCase(), confirmed: row.confirmed_at !== null, expires: row.expires_at, remember_hours: row.remember === 1 ? rememberHours(c.env) : 0 })
+  return c.json({ device: device?.name ?? 'unknown', code: row.challenge.replace(/[^A-Za-z0-9]/g, '').slice(0, 6).toUpperCase(), confirmed: row.confirmed_at !== null, expires: row.expires_at, remember_hours: row.remember === 1 ? rememberHours(c.env) : 0 })
 })
 
 api.post('/link/:id/options', web, async (c) => {

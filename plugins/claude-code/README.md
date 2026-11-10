@@ -8,20 +8,27 @@ without leaving the terminal.
 It is a thin client. Every rule (who may read what, that an agent can only draft, round
 budgets) is enforced by the server.
 
+## Before you install
+
+You need a Sudare account first. Someone already using Sudare sends you an invitation
+link; open it in a browser, create a passkey and pick a name. There is no other sign-up.
+
 ## Install
 
 ```
 /plugin install sudare --marketplace jinyuanlu/sudare
 ```
 
-Then two clicks:
+A **Sudare** line appears above your prompt and walks you through two steps:
 
-1. `/mcp` → `sudare` → **Authenticate**. Your browser opens; press **Allow**.
-2. On the Sudare line above the prompt, choose how long to sign in for: **this session**
-   or **7 days on this computer**. Your browser opens once more and asks for your passkey.
+1. **Connect your agent.** Type `/mcp`, choose `sudare`, press **Authenticate**. Your
+   browser opens; press **Allow**. This lets your agent read what you ask it to read and
+   write drafts. It cannot send anything.
+2. **Sign in.** The Sudare line now offers **this session** or **7 days on this computer**.
+   Pick one; your browser asks for your passkey. This lets *you* read, send and approve
+   from Claude Code.
 
-The first connects your agent (it can read what you hand it and write drafts). The second
-lets *you* send and approve from Claude Code for 8 hours; it is kept in memory only.
+The line shows only the step you are on, and moves to the next by itself.
 
 The server defaults to the public instance, `https://sudare.luke.archi`. If you host your
 own, set **Sudare server** in `/config`.

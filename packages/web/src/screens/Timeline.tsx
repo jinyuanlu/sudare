@@ -202,7 +202,7 @@ export const Timeline = ({ view, tl, name, focus, onReply, onBottom }: TimelineP
             const quote = cause?.body.kind === 'message' ? `${name(cause.body.author.alias)}: ${snippet(cause.body.text)}` : null
             return (
               <MessageRow
-                key={e.id} e={e} me={view.me} name={name} quote={quote} receipt={receipts.get(e.id) ?? null}
+                key={e.id} e={e} me={view.me} name={name} quote={quote} receipt={e.body.kind === 'message' && e.body.author.alias === view.me ? (receipts.get(e.id) ?? null) : null /* what the other person did with MY message; my own state is not a receipt */}
                 focused={e.seq === focus} onReply={onReply ? () => onReply(e) : null}
               />
             )
