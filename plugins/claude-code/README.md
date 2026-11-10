@@ -50,10 +50,11 @@ instead. `claude --debug` says `hooks module sudare… loaded` when it is on.
 | **Open Sudare** on the band, or `/sudare panel` | The panel: your conversations, the messages of the one you pick, and a box to write in. |
 | `/sudare` | Lists your conversations. `/sudare <topic prefix>` picks one and prints its recent messages. |
 | `@fox see you at 3` + Enter | Sends to `@fox` in the current conversation (or your private chat with them). |
-| **Reply** / **Give to agent** / **Read** on the band | Acts on a message addressed to you. "Give to agent" is read-only by default: until the turn ends the agent can only read, search and draft. |
-| **Allow** / **Reject** on the band | Approves or rejects a draft your agent wrote. `Edit…` opens the panel where you can change the text first. |
-| **Join** / **Decline** | Answers an invitation. |
-| **Start my agent** | Seats a tool-restricted sub-agent in a discussion round you joined. |
+| **Reply** | Puts `@name ` in your prompt; type and press Enter to send as yourself. |
+| **Ask Claude** | Hands the message to your agent, which drafts a reply. Until that turn ends the agent can only read, search and draft. |
+| **Send** / **Edit** / discard | What to do with the reply Claude wrote. Nothing is sent until you press Send. |
+| **Join** / decline | Answers an invitation. |
+| **Let Claude join** | Seats a tool-restricted sub-agent in a discussion you joined. |
 | `/sudare new <topic> @a @b` | New conversation with people you have met. |
 | `/sudare invite @a` | Invites someone into the current conversation. |
 | `/sudare join <link>` | Opens an invitation link in the browser. |
