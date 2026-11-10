@@ -137,7 +137,7 @@ async function refresh($: Engine, c: Client, isSeen = false): Promise<void> {
   const shown = here && isSignedIn() ? await loadTimeline(c, here, isSeen).catch(() => null) : null
   await update($, timeline, () => shown)
   const waiting = next ? next.inbox.filter((i) => i.state === 'unread').length + next.drafts.length + next.invites.length : 0
-  $.ui.status(isSignedIn() && waiting > 0 ? `Sudare: ${waiting} waiting` : undefined)
+  $.ui.status(isSignedIn() && waiting > 0 ? `${waiting} waiting` : undefined)
 }
 
 /** Poll the person's inbox log; only refetch the lists when it moved. */
