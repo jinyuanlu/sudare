@@ -29,10 +29,8 @@ const kept = atom({ plugin: 'sudare', key: 'isKept' } as const, false)
 const helpOpen = atom({ plugin: 'sudare', key: 'isHelpOpen' } as const, false)
 
 const HELP = [
-  'Read and write here. Messages from others also show above your prompt.',
-  'To: pick everyone or one person. ● means they are here now.',
-  'Ask Claude (above the prompt) lets your agent draft a reply. Nothing is sent until you press Send.',
-  'Invite adds a person. New room starts another topic with people from this one.',
+  'Write below. Replies show above your prompt.',
+  'Ask Claude drafts a reply; nothing goes out until you press Send.',
 ]
 
 /** Who the next message in the panel is addressed to; null means everyone in the conversation. */
@@ -115,7 +113,7 @@ const loadTimeline = async (c: Client, conv: string, isSeen: boolean): Promise<S
   if (last && isSeen) await c.api('POST', `/convs/${conv}/read`, { seq: num(last.seq) })
   const others = members.filter((m) => m.me !== true && m.left !== true).map((m): SudarePerson => ({ handle: str(m.handle), alias: str(m.alias), isHere: m.active === true }))
   const isPrivate = str(v.dm_with) !== ''
-  return { conv, topic: isPrivate ? `Private chat with ${str(v.dm_with)}` : str(v.topic), me, others, lines, isPrivate, canInvite: v.can_invite === true }
+  return { conv, topic: isPrivate ? `${str(v.dm_with)}` : str(v.topic), me, others, lines, isPrivate, canInvite: v.can_invite === true }
 }
 
 // The position in the person's inbox log this session has seen. Module state: a reload starts over, which only costs one refetch.
@@ -375,7 +373,6 @@ export const register: Register = (on, options) => {
       await c.restore().catch(() => undefined)
       if ((await $.store.get('signedInOnce').catch(() => true)) !== true) await update($, firstRun, () => true)
       if (!isSignedIn()) await probe($, c).catch(() => undefined)
-      if ((await $.store.get('helpSeen').catch(() => true)) !== true) await update($, helpOpen, () => true)
       await refresh($, c)
     }
     return next(e)
@@ -596,7 +593,7 @@ export const register: Register = (on, options) => {
         {isHelp && (
           <Box flexDirection="column">
             {HELP.map((line) => <Text dimColor>· {line}</Text>)}
-            <Button key="help-close" plain label="Got it" onPress={() => closeHelp($)} />
+            <Button key="help-close" plain label="ok" onPress={() => closeHelp($)} />
           </Box>
         )}
         {note && note.startsWith('Invitation link') && <Text dimColor>{note}</Text>}
@@ -605,10 +602,10 @@ export const register: Register = (on, options) => {
           <Box flexDirection="column">
             <Text>
               <Text bold>{clip(shown.topic, 50)}</Text>
-              <Text dimColor>{`  you are ${shown.me}`}{shown.others.length === 1 ? ` · ${shown.others[0]!.handle} is ${shown.others[0]!.isHere ? 'here now' : 'away'}` : shown.others.length > 1 ? ` · ${shown.others.filter((o) => o.isHere).length} of ${shown.others.length} others here now` : ''}</Text>
+              <Text dimColor>{shown.others.length === 1 ? `  ${shown.others[0]!.isHere ? '● here' : '○ away'}` : shown.others.length > 1 ? `  ${shown.others.filter((o) => o.isHere).length} of ${shown.others.length} here` : ''}{`  · you are ${shown.me}`}</Text>
             </Text>
-            {shown.others.length === 0 && <Text>Nobody else is here yet. Press Invite and send the copied link to the person you want here.</Text>}
-            {shown.others.length > 0 && shown.lines.length === 0 && <Text dimColor>Nobody has written yet.</Text>}
+            {shown.others.length === 0 && <Text>Only you here. Press Invite.</Text>}
+            {shown.others.length > 0 && shown.lines.length === 0 && <Text dimColor>No messages yet.</Text>}
             {shown.lines.slice(-room).map((l) => (
               <Text>
                 <Text bold={!l.isMine} dimColor={l.isMine}>{l.isMine ? 'you' : l.from}</Text>
@@ -630,7 +627,7 @@ export const register: Register = (on, options) => {
         )}
         {shown && (
           <Input key={`say-${shown.conv}`} submitLabel="Send"
-            placeholder={picked ? `Message for ${picked.handle} (the others can read it too)` : shown.others.length > 1 ? 'Message to everyone here' : shown.others.length === 1 ? `Message ${shown.others[0]!.handle}` : 'Write a message…'}
+            placeholder={picked ? `For ${picked.handle} (all can read)` : shown.others.length > 1 ? 'Message everyone' : shown.others.length === 1 ? `Message ${shown.others[0]!.handle}` : 'Write a message'}
             onSubmit={(text) => void sayHere($, c, shown.conv, text, picked?.handle ?? null)} />
         )}
         {others.length > 0 && (
@@ -639,7 +636,7 @@ export const register: Register = (on, options) => {
             {others.map((x) => (
               <Button key={`conv-${x.id}`} plain onPress={() => openConv($, c, x.id)}>
                 {clip(x.topic, 40)}{' '}
-                <Text dimColor>{x.unread ? `${x.unread} unread ` : ''}{x.pending ? `${x.pending} for you ` : ''}{x.round ? '⟳' : ''}</Text>
+                <Text dimColor>{x.unread ? `${x.unread} new` : ''}</Text>
               </Button>
             ))}
           </Box>
@@ -679,9 +676,8 @@ export const register: Register = (on, options) => {
         <Box gap={2} flexWrap="wrap">
           {shown && shown.canInvite && <Button key="invite" label="Invite" onPress={() => inviteLink($, c, shown.conv, e.surface)} />}
           {shown && !shown.isPrivate && !form.isOpen && <Button key="new" label="New room" onPress={() => update($, compose, () => ({ isOpen: true, people: shown.others.map((o) => o.handle) }))} />}
-          <Button key="web" label="Web app" onPress={() => c.open(c.base)} />
+          <Button key="web" plain label="web" onPress={() => c.open(c.base)} />
           <Button key="help" plain label="help" onPress={() => update($, helpOpen, (v) => !v)} />
-          <Button key="refresh" plain label="refresh" onPress={() => refresh($, c)} />
           <Button key="signout" plain label="sign out" onPress={async () => (await c.signOut(), refresh($, c))} />
         </Box>
       </Box>
