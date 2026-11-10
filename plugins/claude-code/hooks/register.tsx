@@ -58,13 +58,40 @@ const load = async (c: Client): Promise<SudareSnapshot | null> => {
   )
   if (![convs, inbox, drafts, invites, seats].every((r) => r?.ok)) return null
   return {
-    convs: list(convs!.body).map((x): SudareConv => ({ id: str(x.id), topic: str(x.dm_with) ? `${str(x.dm_with)} (private)` : str(x.topic), unread: num(x.unread), pending: num(x.pending), round: str(x.round) || null })),
+    convs: list(convs!.body).map((x): SudareConv => ({ id: str(x.id), topic: str(x.dm_with) ? `${str(x.dm_with)} · private` : str(x.topic), unread: num(x.unread), pending: num(x.pending), round: str(x.round) || null })),
     inbox: list(inbox!.body).map((x): SudareItem => ({ msg: str(x.msg), conv: str(x.conv), topic: str(x.topic), from: str(x.from), text: str(x.text), state: str(x.state) })),
     drafts: list(drafts!.body).map((x): SudareDraft => ({ id: str(x.id), topic: str(x.topic) || null, kind: draftKind(x.target), text: str(x.text), device: str(x.device_name), status: str(x.status) })),
     invites: list(invites!.body).map((x): SudareInvite => ({ id: str(x.id), topic: str(x.topic), by: str(x.by), members: num(x.members) })),
     seats: list(seats!.body).map((x): SudareSeat => ({ round: str(x.round), conv: str(x.conv), topic: str(x.topic), goal: str(x.goal), isSeated: x.device !== null && x.device !== undefined })),
     at: Date.now(),
   }
+}
+
+const REASONS: Record<string, string> = {
+  invite_forbidden: 'nobody can be invited into this room',
+  not_member: 'you are not in this room',
+  conv_archived: 'this room is closed',
+  conv_full: 'this room is full',
+  conv_missing: 'this room no longer exists',
+  handle_taken: 'someone here already uses that name',
+  handle_invalid: 'that name is not allowed: use one word, no spaces',
+  already_member: 'they are already in this room',
+  invite_invalid: 'that invitation was already used or has expired',
+  recipient_unknown: 'nobody here has that name',
+  text_too_large: 'the message is too long',
+  draft_not_pending: 'that reply was already sent or discarded',
+  invalid_transition: 'that was already dealt with',
+  round_closed: 'the discussion has ended',
+  round_open_exists: 'a discussion is already running here',
+  rate_limited: 'too many requests; wait a moment',
+  unauthenticated: 'you are signed out',
+  unavailable: 'the server did not answer; try again',
+}
+
+/** Why a request failed, in words a person can act on. Never a bare error code. */
+const why = (r: { status: number; body: Json | Json[] }): string => {
+  const code = str((r.body as Json).error)
+  return REASONS[code] ?? (code ? code.replace(/_/g, ' ') : `the server answered ${r.status}`)
 }
 
 /** The last messages of one conversation, with handles in place of alias ids. */
@@ -87,7 +114,8 @@ const loadTimeline = async (c: Client, conv: string, isSeen: boolean): Promise<S
   // Only a person looking at it counts as reading; a background refresh does not.
   if (last && isSeen) await c.api('POST', `/convs/${conv}/read`, { seq: num(last.seq) })
   const others = members.filter((m) => m.me !== true && m.left !== true).map((m): SudarePerson => ({ handle: str(m.handle), alias: str(m.alias), isHere: m.active === true }))
-  return { conv, topic: str(v.dm_with) ? `${str(v.dm_with)} (private)` : str(v.topic), me, others, lines }
+  const isPrivate = str(v.dm_with) !== ''
+  return { conv, topic: isPrivate ? `Private chat with ${str(v.dm_with)}` : str(v.topic), me, others, lines, isPrivate, canInvite: v.can_invite === true }
 }
 
 // The position in the person's inbox log this session has seen. Module state: a reload starts over, which only costs one refetch.
@@ -204,7 +232,7 @@ async function post($: Engine, c: Client, path: string, body: Json, done: string
   const r = await c.api('POST', path, body)
   // Good news is a passing toast; only a problem stays on the band until dismissed.
   if (r.ok) $.ui.toast(done)
-  await update($, notice, () => (r.ok ? null : r.status === 401 ? 'Signed out. Press Sign in.' : `That did not work: ${str((r.body as Json).error) || r.status}`))
+  await update($, notice, () => (r.ok ? null : r.status === 401 ? 'Signed out. Press Sign in.' : `That did not work: ${why(r)}.`))
   await refresh($, c)
   return r.ok
 }
@@ -223,7 +251,7 @@ async function sayHere($: Engine, c: Client, conv: string, text: string, picked:
   const to = [...new Set([...(picked ? [picked] : []), ...[...body.matchAll(/(^|\s)@([^\s@]{1,24})/g)].map((m) => m[2]!)])]
   const r = await c.api('POST', `/convs/${conv}/messages`, { id: newId(), text: body, to_handles: to })
   if (!r.ok && str((r.body as Json).error) === 'recipient_unknown') await c.api('POST', `/convs/${conv}/messages`, { id: newId(), text: body })
-  else if (!r.ok) await say($, `Not sent: ${str((r.body as Json).error) || r.status}`)
+  else if (!r.ok) await say($, `Not sent: ${why(r)}`)
   if (r.ok) await update($, target, () => null) // the choice is for one message, not a mode
   await refresh($, c)
 }
@@ -238,7 +266,7 @@ async function createFrom($: Engine, c: Client, from: SudareTimeline, people: st
   const members = from.others.filter((o) => people.includes(o.handle)).map((o) => ({ conv: from.conv, alias: o.alias }))
   const r = await c.api('POST', '/convs', { topic: title, parent: from.conv, members })
   const made = str((r.body as Json).conv)
-  if (!r.ok || made === '') return void (await say($, `Not created: ${str((r.body as Json).error) || r.status}`))
+  if (!r.ok || made === '') return void (await say($, `Not created: ${why(r)}.`))
   await update($, compose, () => ({ isOpen: false, people: [] }))
   $.ui.toast(`Created "${title}"`)
   await openConv($, c, made)
@@ -268,7 +296,7 @@ async function closeHelp($: Engine): Promise<void> {
 async function openPrivate($: Engine, c: Client, conv: string, person: SudarePerson): Promise<void> {
   const r = await c.api('POST', '/convs', { topic: `@${person.handle}`, members: [{ conv, alias: person.alias }], dm: true })
   const made = str((r.body as Json).conv)
-  if (!r.ok || made === '') return void (await say($, `No private chat: ${str((r.body as Json).error) || r.status}`))
+  if (!r.ok || made === '') return void (await say($, `Could not open a private chat: ${why(r)}.`))
   await update($, target, () => null)
   await openConv($, c, made)
 }
@@ -277,7 +305,7 @@ async function openPrivate($: Engine, c: Client, conv: string, person: SudarePer
 async function inviteLink($: Engine, c: Client, conv: string, surface: 'terminal' | 'desktop' | 'vscode' | 'mobile'): Promise<void> {
   const r = await c.api('POST', `/convs/${conv}/invites`, { link: true })
   const url = str((r.body as Json).url)
-  if (!r.ok || url === '') return void (await say($, `No link: ${str((r.body as Json).error) || r.status}`))
+  if (!r.ok || url === '') return void (await say($, `Could not make a link: ${why(r)}.`))
   const copied = await $.ui.copy({ text: url, surface }).catch(() => ({ isCopied: false }))
   await say($, `${copied.isCopied ? 'Invitation link copied' : 'Invitation link'} (works once, 7 days): ${url}`)
 }
@@ -312,7 +340,7 @@ async function send($: Engine, c: Client, handle: string, text: string): Promise
   const members = list((view?.body as Json | undefined)?.members).filter((m) => m.left !== true)
   if (here && members.some((m) => str(m.handle).toLowerCase() === handle.toLowerCase())) {
     const r = await c.api('POST', `/convs/${here}/messages`, { id: newId(), text, to_handles: [handle] })
-    return r.ok ? `Sent to @${handle} in "${str((view!.body as Json).topic)}".` : `Not sent: ${str((r.body as Json).error)}`
+    return r.ok ? `Sent to @${handle} in "${str((view!.body as Json).topic)}".` : `Not sent: ${why(r)}`
   }
   // No current conversation with that person: use the private chat, creating it on first use.
   const { refs, problem } = await contacts(c, [handle])
@@ -321,7 +349,7 @@ async function send($: Engine, c: Client, handle: string, text: string): Promise
   const conv = str((dm.body as Json).conv)
   if (!dm.ok || !conv) return `Not sent: ${str((dm.body as Json).error)}`
   const r = await c.api('POST', `/convs/${conv}/messages`, { id: newId(), text })
-  return r.ok ? `Sent to @${handle} privately.` : `Not sent: ${str((r.body as Json).error)}`
+  return r.ok ? `Sent to @${handle} privately.` : `Not sent: ${why(r)}`
 }
 
 export const register: Register = (on, options) => {
@@ -391,7 +419,7 @@ export const register: Register = (on, options) => {
       const { refs, problem } = await contacts(c, handles)
       if (problem || refs.length === 0) return { text: problem ?? 'Usage: /sudare invite @handle' }
       const results = await Promise.all(refs.map((to) => c.api('POST', `/convs/${here}/invites`, { to })))
-      return { text: results.every((r) => r.ok) ? `Invited ${handles.join(', ')}.` : `Some invitations failed: ${results.map((r) => str((r.body as Json).error)).filter(Boolean).join(', ')}` }
+      return { text: results.every((r) => r.ok) ? `Invited ${handles.join(', ')}.` : `Some invitations failed: ${results.filter((r) => !r.ok).map(why).join('; ')}` }
     }
 
     await refresh($, c)
@@ -571,16 +599,16 @@ export const register: Register = (on, options) => {
             <Button key="help-close" plain label="Got it" onPress={() => closeHelp($)} />
           </Box>
         )}
-        {note && <Text dimColor>{note}</Text>}
+        {note && note.startsWith('Invitation link') && <Text dimColor>{note}</Text>}
         {snap.convs.length === 0 && <Text dimColor>No rooms yet. Join one with an invitation link.</Text>}
         {shown && (
           <Box flexDirection="column">
             <Text>
               <Text bold>{clip(shown.topic, 50)}</Text>
-              <Text dimColor>{`  you are ${shown.me}`}{shown.others.length > 0 ? ` · ${shown.others.filter((o) => o.isHere).length} of ${shown.others.length} others here now` : ''}</Text>
+              <Text dimColor>{`  you are ${shown.me}`}{shown.others.length === 1 ? ` · ${shown.others[0]!.handle} is ${shown.others[0]!.isHere ? 'here now' : 'away'}` : shown.others.length > 1 ? ` · ${shown.others.filter((o) => o.isHere).length} of ${shown.others.length} others here now` : ''}</Text>
             </Text>
             {shown.others.length === 0 && <Text>Nobody else is here yet. Press Invite and send the copied link to the person you want here.</Text>}
-            {shown.others.length > 0 && shown.lines.length === 0 && <Text dimColor>Nobody has written yet. Write below; everyone here receives it.</Text>}
+            {shown.others.length > 0 && shown.lines.length === 0 && <Text dimColor>Nobody has written yet.</Text>}
             {shown.lines.slice(-room).map((l) => (
               <Text>
                 <Text bold={!l.isMine} dimColor={l.isMine}>{l.isMine ? 'you' : l.from}</Text>
@@ -590,7 +618,7 @@ export const register: Register = (on, options) => {
             ))}
           </Box>
         )}
-        {shown && shown.others.length > 0 && (
+        {shown && shown.others.length > 1 && (
           <Box gap={2} flexWrap="wrap">
             <Text dimColor>To</Text>
             <Button key="to-all" {...(to !== null ? { plain: true as const } : {})} label="everyone" onPress={() => update($, target, () => null)} />
@@ -602,7 +630,7 @@ export const register: Register = (on, options) => {
         )}
         {shown && (
           <Input key={`say-${shown.conv}`} submitLabel="Send"
-            placeholder={picked ? `Message for ${picked.handle} (the others can read it too)` : shown.others.length > 0 ? 'Message to everyone here' : 'Write a message…'}
+            placeholder={picked ? `Message for ${picked.handle} (the others can read it too)` : shown.others.length > 1 ? 'Message to everyone here' : shown.others.length === 1 ? `Message ${shown.others[0]!.handle}` : 'Write a message…'}
             onSubmit={(text) => void sayHere($, c, shown.conv, text, picked?.handle ?? null)} />
         )}
         {others.length > 0 && (
@@ -649,8 +677,8 @@ export const register: Register = (on, options) => {
           </Box>
         )}
         <Box gap={2} flexWrap="wrap">
-          {shown && <Button key="invite" label="Invite" onPress={() => inviteLink($, c, shown.conv, e.surface)} />}
-          {shown && !form.isOpen && <Button key="new" label="New room" onPress={() => update($, compose, () => ({ isOpen: true, people: shown.others.map((o) => o.handle) }))} />}
+          {shown && shown.canInvite && <Button key="invite" label="Invite" onPress={() => inviteLink($, c, shown.conv, e.surface)} />}
+          {shown && !shown.isPrivate && !form.isOpen && <Button key="new" label="New room" onPress={() => update($, compose, () => ({ isOpen: true, people: shown.others.map((o) => o.handle) }))} />}
           <Button key="web" label="Web app" onPress={() => c.open(c.base)} />
           <Button key="help" plain label="help" onPress={() => update($, helpOpen, (v) => !v)} />
           <Button key="refresh" plain label="refresh" onPress={() => refresh($, c)} />
