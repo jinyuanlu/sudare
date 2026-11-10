@@ -14,6 +14,11 @@ export type SudareSnapshot = {
   at: number
 }
 
+export type SudareLine = { id: string; from: string; text: string; via: string; isMine: boolean }
+
+/** The last messages of the conversation the person is looking at. */
+export type SudareTimeline = { conv: string; topic: string; me: string; lines: SudareLine[] }
+
 /** A pending "confirm in your browser" request: the pairing code the person compares, and where to confirm. */
 export type SudareLink = { code: string; url: string }
 
@@ -22,6 +27,7 @@ declare module 'claude-code' {
     sudare: {
       snapshot: SudareSnapshot
       current: string | null
+      timeline: SudareTimeline | null
       link: SudareLink | null
       isSignedIn: boolean
       notice: string | null

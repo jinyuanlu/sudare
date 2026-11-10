@@ -6,7 +6,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { SudareConv, SudareDraft, SudareInvite, SudareItem, SudareLink, SudareSeat, SudareSnapshot } from '../types'
+import type { SudareConv, SudareDraft, SudareInvite, SudareItem, SudareLine, SudareLink, SudareSeat, SudareSnapshot, SudareTimeline } from '../types'
 import { isSignedIn, makeClient, signOut, type Client, type Json } from './client'
 import { enterReadonly, isPluginOnlyTool, leaveReadonly, refusal } from './guard'
 
@@ -16,6 +16,7 @@ const EMPTY: SudareSnapshot = { convs: [], inbox: [], drafts: [], invites: [], s
 
 const snapshot = atom({ plugin: 'sudare', key: 'snapshot' } as const, EMPTY)
 const current = atom({ plugin: 'sudare', key: 'current' } as const, null)
+const timeline = atom({ plugin: 'sudare', key: 'timeline' } as const, null)
 const link = atom({ plugin: 'sudare', key: 'link' } as const, null)
 const signedIn = atom({ plugin: 'sudare', key: 'isSignedIn' } as const, false)
 const notice = atom({ plugin: 'sudare', key: 'notice' } as const, null)
@@ -46,6 +47,27 @@ const load = async (c: Client): Promise<SudareSnapshot | null> => {
   }
 }
 
+/** The last messages of one conversation, with handles in place of alias ids. Marks it read. */
+const loadTimeline = async (c: Client, conv: string): Promise<SudareTimeline | null> => {
+  const [view, page] = await Promise.all([c.api('GET', `/convs/${conv}`), c.api('GET', `/convs/${conv}/events?limit=40`)])
+  if (!view.ok || !page.ok) return null
+  const v = view.body as Json
+  const members = list(v.members)
+  const name = (alias: unknown) => str(members.find((m) => m.alias === alias)?.handle) || '?'
+  const me = str(members.find((m) => m.me === true)?.handle)
+  const events = list((page.body as Json).events)
+  const lines = events.flatMap((e): SudareLine[] => {
+    const b = e.body as Json
+    const author = b.author as Json | undefined
+    if (b.kind === 'message' && author) return [{ id: str(e.id), from: name(author.alias), text: str(b.text), via: str(author.kind), isMine: author.alias === v.me }]
+    if (b.kind === 'note_revision' && author) return [{ id: str(e.id), from: name(author.alias), text: `proposed note "${str(b.title)}" (v${num(b.rev)})`, via: 'note', isMine: author.alias === v.me }]
+    return []
+  })
+  const last = events[events.length - 1]
+  if (last) void c.api('POST', `/convs/${conv}/read`, { seq: num(last.seq) })
+  return { conv, topic: str(v.topic), me, lines }
+}
+
 // The position in the person's inbox log this session has seen. Module state: a reload starts over, which only costs one refetch.
 let cursor = 0
 
@@ -57,6 +79,9 @@ async function refresh($: Engine, c: Client): Promise<void> {
   const next = isSignedIn() ? await load(c) : null
   await update($, signedIn, () => isSignedIn())
   await update($, snapshot, () => next ?? EMPTY)
+  const here = await read($, current)
+  const shown = here && isSignedIn() ? await loadTimeline(c, here).catch(() => null) : null
+  await update($, timeline, () => shown)
   const waiting = next ? next.inbox.filter((i) => i.state === 'unread').length + next.drafts.length + next.invites.length : 0
   $.ui.status(!isSignedIn() ? undefined : waiting > 0 ? `簾 ${waiting} waiting` : '簾')
 }
@@ -91,7 +116,8 @@ async function signIn($: Engine, c: Client, allowHuman: boolean): Promise<string
     if (state === 'confirmed') {
       cursor = 0
       await refresh($, c)
-      $.ui.toast('Sudare: signed in for this session')
+      $.ui.toast('Sudare: signed in')
+      void $.ui.open({ id: PANE, title: 'Sudare' })
     } else {
       await say($, 'Sign-in expired. Run /sudare signin to try again.')
     }
@@ -129,6 +155,25 @@ async function post($: Engine, c: Client, path: string, body: Json, done: string
   await refresh($, c)
   return r.ok
 }
+
+async function openConv($: Engine, c: Client, conv: string): Promise<void> {
+  await update($, current, () => conv)
+  await refresh($, c)
+}
+
+/** "@a @b rest" names people; anything else is a message to the whole conversation. */
+async function sayHere($: Engine, c: Client, conv: string, text: string): Promise<void> {
+  const body = text.trim()
+  if (body === '') return
+  const to = [...body.matchAll(/(^|\s)@([^\s@]{1,24})/g)].map((m) => m[2]!)
+  const r = await c.api('POST', `/convs/${conv}/messages`, { id: newId(), text: body, to_handles: to })
+  if (!r.ok && str((r.body as Json).error) === 'recipient_unknown') await c.api('POST', `/convs/${conv}/messages`, { id: newId(), text: body })
+  else if (!r.ok) await say($, `Not sent: ${str((r.body as Json).error) || r.status}`)
+  await refresh($, c)
+}
+
+const transcript = (t: SudareTimeline): string =>
+  t.lines.length === 0 ? '(no messages yet)' : t.lines.map((l) => `${l.isMine ? 'you' : `@${l.from}`}${l.via === 'delegate' ? ' (via agent)' : l.via === 'autonomous' ? ' (agent, round)' : ''}: ${l.text}`).join('\n')
 
 async function handOff($: Engine, c: Client, item: SudareItem, mode: 'readonly' | 'full'): Promise<void> {
   if (!(await post($, c, `/inbox/${item.msg}/handoff`, { mode }, `Handed @${item.from}'s message to your agent (${mode}).`))) return
@@ -234,8 +279,10 @@ export const register: Register = (on, options) => {
       const prefix = e.args.trim().toLowerCase()
       const hit = snap.convs.find((x) => x.topic.toLowerCase().startsWith(prefix))
       if (!hit) return { text: `No conversation starts with "${e.args.trim()}".` }
-      await update($, current, () => hit.id)
-      return { text: `Current conversation: "${hit.topic}". Type "@handle message" to send.` }
+      await openConv($, c, hit.id)
+      void $.ui.open({ id: PANE, title: 'Sudare' })
+      const shown = await read($, timeline)
+      return { text: `── ${hit.topic} ──\n${shown ? transcript(shown) : '(could not load)'}\n\nType "@handle message" to send, or write in the panel.` }
     }
     const here = await read($, current)
     const lines = snap.convs.map((x) => `${x.id === here ? '▸' : ' '} ${x.topic}${x.unread ? `  (${x.unread} unread)` : ''}${x.pending ? `  [${x.pending} for you]` : ''}${x.round ? '  ⟳ round' : ''}`)
@@ -292,7 +339,15 @@ export const register: Register = (on, options) => {
     const draft = snap.drafts[0]
     const invite = snap.invites[0]
     const seat = snap.seats.find((s) => !s.isSeated)
-    if (!item && !draft && !invite && !seat && !note) return next(e)
+    if (!item && !draft && !invite && !seat && !note) {
+      const unread = snap.convs.reduce((n, x) => n + x.unread, 0)
+      return (
+        <Box>
+          <Text dimColor>簾 {unread > 0 ? `${unread} unread ` : ''}</Text>
+          <Button key="open" plain label="Open Sudare" onPress={() => $.ui.open({ id: PANE, title: 'Sudare' })} />
+        </Box>
+      )
+    }
     const topic = snap.convs.find((x) => x.id === here)?.topic
 
     return (
@@ -345,7 +400,8 @@ export const register: Register = (on, options) => {
     const { Box, Button, Input, Text } = $.ui.resolve(e)
     if (server === '') return <Text dimColor>Set the Sudare server URL in /config.</Text>
     const c = makeClient($, server)
-    const [snap, here, isIn] = [await read($, snapshot), await read($, current), await read($, signedIn)]
+    const [snap, here, isIn, shown] = [await read($, snapshot), await read($, current), await read($, signedIn), await read($, timeline)]
+    const room = Math.max(5, (e.viewport?.rows ?? 30) - snap.convs.length - 12)
     if (!isIn) {
       return (
         <Box flexDirection="column">
@@ -361,11 +417,25 @@ export const register: Register = (on, options) => {
         <Text bold>Conversations</Text>
         {snap.convs.length === 0 && <Text dimColor>None yet.</Text>}
         {snap.convs.map((x) => (
-          <Button key={`conv-${x.id}`} plain onPress={() => update($, current, () => x.id)}>
+          <Button key={`conv-${x.id}`} plain onPress={() => openConv($, c, x.id)}>
             {x.id === here ? '▸ ' : '  '}{clip(x.topic, 40)}{' '}
             <Text dimColor>{x.unread ? `${x.unread} unread ` : ''}{x.pending ? `${x.pending} for you ` : ''}{x.round ? '⟳' : ''}</Text>
           </Button>
         ))}
+        {shown && (
+          <Box flexDirection="column" marginTop={1}>
+            <Text bold>{clip(shown.topic, 40)}</Text>
+            {shown.lines.length === 0 && <Text dimColor>No messages yet.</Text>}
+            {shown.lines.slice(-room).map((l) => (
+              <Text>
+                <Text bold={!l.isMine} dimColor={l.isMine}>{l.isMine ? 'you' : l.from}</Text>
+                {l.via === 'delegate' ? <Text dimColor> via agent</Text> : l.via === 'autonomous' ? <Text dimColor> agent</Text> : ''}
+                <Text dimColor>: </Text>{l.text}
+              </Text>
+            ))}
+            <Input key={`say-${shown.conv}`} placeholder="Message (use @name to address someone)" submitLabel="Send" onSubmit={(text) => void sayHere($, c, shown.conv, text)} />
+          </Box>
+        )}
         {snap.drafts.length > 0 && <Text bold>Drafts waiting for you</Text>}
         {snap.drafts.map((d) => (
           <Box key={`draft-${d.id}`} flexDirection="column">

@@ -47,7 +47,8 @@ instead. `claude --debug` says `hooks module sudare… loaded` when it is on.
 
 | You do | What happens |
 | --- | --- |
-| `/sudare` | Lists your conversations. `/sudare <topic prefix>` picks the current one. |
+| **Open Sudare** on the band, or `/sudare panel` | The panel: your conversations, the messages of the one you pick, and a box to write in. |
+| `/sudare` | Lists your conversations. `/sudare <topic prefix>` picks one and prints its recent messages. |
 | `@fox see you at 3` + Enter | Sends to `@fox` in the current conversation (or your private chat with them). |
 | **Reply** / **Give to agent** / **Read** on the band | Acts on a message addressed to you. "Give to agent" is read-only by default: until the turn ends the agent can only read, search and draft. |
 | **Allow** / **Reject** on the band | Approves or rejects a draft your agent wrote. `Edit…` opens the panel where you can change the text first. |
