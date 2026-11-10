@@ -9,6 +9,8 @@
 
 import type { EngineInterface } from 'claude-code'
 
+import { asPlugin } from './guard'
+
 type Engine = EngineInterface
 export type Json = Record<string, unknown>
 export type Reply = { ok: boolean; status: number; body: Json | Json[] }
@@ -68,11 +70,16 @@ export function makeClient($: Engine, server: string) {
       const first = r.content[0] as { type?: string; text?: string } | undefined
       return { ok: !r.isError, status: r.isError ? 400 : 200, body: parse(first?.text ?? '{}') }
     }
-    try {
-      return await attempt('plugin:sudare:sudare')
-    } catch {
-      return attempt('sudare')
+    // Claude Code names a plugin's server plugin:<plugin>:<server>; older builds used the bare name.
+    const errors: string[] = []
+    for (const serverName of ['plugin:sudare:sudare', 'sudare']) {
+      try {
+        return await attempt(serverName)
+      } catch (e) {
+        errors.push(e instanceof Error ? e.message : String(e))
+      }
     }
+    return { ok: false, status: 0, body: { error: errors[0] ?? 'the Sudare MCP server did not answer' } }
   }
 
   /**
@@ -83,9 +90,9 @@ export function makeClient($: Engine, server: string) {
   const beginSignIn = async (): Promise<{ ok: true; code: string; url: string; link: string; secret: string } | { ok: false; error: string }> => {
     const secret = `sds_${b64url(crypto.getRandomValues(new Uint8Array(32)))}`
     const challenge = await sha256(secret)
-    const started = await tool('human_session_start', { challenge }).catch(() => null)
-    const body = started?.body as { url?: string; link?: string; error?: string } | undefined
-    if (!started?.ok || !body?.url || !body.link) return { ok: false, error: body?.error ?? 'the Sudare MCP server is not connected' }
+    const started = await asPlugin(() => tool('human_session_start', { challenge }))
+    const body = started.body as { url?: string; link?: string; error?: string }
+    if (!started.ok || !body.url || !body.link) return { ok: false, error: String(body.error ?? 'unexpected answer from the server').slice(0, 200) }
     return { ok: true, code: challenge.slice(0, 6).toUpperCase(), url: body.url, link: body.link, secret }
   }
 

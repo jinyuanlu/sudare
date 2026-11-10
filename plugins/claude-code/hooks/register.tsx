@@ -8,7 +8,7 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { SudareConv, SudareDraft, SudareInvite, SudareItem, SudareLine, SudareLink, SudareSeat, SudareSnapshot, SudareTimeline } from '../types'
 import { isSignedIn, makeClient, signOut, type Client, type Json } from './client'
-import { enterReadonly, isPluginOnlyTool, leaveReadonly, refusal } from './guard'
+import { enterReadonly, isOwnCall, isPluginOnlyTool, leaveReadonly, refusal } from './guard'
 
 type Engine = EngineInterface
 const PANE = 'sudare'
@@ -103,7 +103,7 @@ async function signIn($: Engine, c: Client, allowHuman: boolean): Promise<string
     return 'The in-plugin human session is turned off; approvals happen in the web app, which was opened.'
   }
   const begun = await c.beginSignIn()
-  if (!begun.ok) return `Could not start sign-in: ${begun.error}. Check that the Sudare MCP server is connected (/mcp).`
+  if (!begun.ok) return `Sign-in could not start (${begun.error}). If Sudare is not connected yet: /mcp → sudare → Authenticate.`
   const pending: SudareLink = { code: begun.code, url: begun.url }
   await update($, link, () => pending)
   const opened = await c.open(begun.url)
@@ -122,7 +122,7 @@ async function signIn($: Engine, c: Client, allowHuman: boolean): Promise<string
       await say($, 'Sign-in expired. Run /sudare signin to try again.')
     }
   })
-  return `${opened ? 'Your browser was opened.' : `Open ${begun.url}`} Confirm with your passkey only if the page shows the code ${begun.code}.`
+  return opened ? `Check your browser: the code is ${begun.code}.` : `Open ${begun.url} (code ${begun.code}).`
 }
 
 /** Resolve @handles to "alias in conversation" references among the people this person has met. */
@@ -300,7 +300,7 @@ export const register: Register = (on, options) => {
   // Read-only handoffs, and a tool that belongs to the mod alone.
   on('tool.call', ($, e, next) => {
     const tool = String(e.tool)
-    if (isPluginOnlyTool(tool)) return { deny: 'Sudare: only the plugin may request a human session.' }
+    if (isPluginOnlyTool(tool)) return isOwnCall() ? next(e) : { deny: 'Sudare: only the plugin may request a human session.' }
     const why = refusal(tool, e as unknown as Record<string, unknown>)
     return why ? { deny: why } : next(e)
   }).catch(($, e, next) => (next.called ? next(e) : { deny: 'Sudare: the read-only guard failed; refusing.' }))

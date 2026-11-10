@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { enterReadonly, isSudareTool, leaveReadonly, refusal } from '../hooks/guard'
+import { asPlugin, enterReadonly, isSudareTool, leaveReadonly, refusal } from '../hooks/guard'
 
 const OPTIONS = { options: { server: 'https://sudare.test', humanSession: 'on' } }
 
@@ -43,4 +43,9 @@ test('the model cannot ask for a human session; the gate holds through the hook'
 
   await $.tool.call({ tool: 'Bash', command: 'ls' })
   expect(reached).toBe(1)
+
+  // The plugin's own request passes even where the engine routes it through tool.call.
+  const own = await asPlugin(() => $.tool.call({ tool: 'mcp__plugin_sudare_sudare__human_session_start', challenge: 'x' }))
+  expect(own.deny).toBeUndefined()
+  expect(reached).toBe(2)
 })

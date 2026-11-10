@@ -29,3 +29,17 @@ export const refusal = (tool: string, input: Record<string, unknown>): string | 
   const paths = [input.file_path, input.path, input.pattern, input.glob, input.notebook_path].filter((p): p is string => typeof p === 'string')
   return paths.some((p) => SECRET_PATH.test(p)) ? 'Sudare: credential paths are off limits under a read-only handoff.' : null
 }
+
+// The plugin's own calls to its plugin-only tool. Some engine builds route a
+// plugin's $.mcp.call through the same tool.call hooks the model's calls take;
+// without this the guard below would refuse the plugin itself.
+let ownCalls = 0
+export const asPlugin = async <T>(run: () => Promise<T>): Promise<T> => {
+  ownCalls += 1
+  try {
+    return await run()
+  } finally {
+    ownCalls -= 1
+  }
+}
+export const isOwnCall = (): boolean => ownCalls > 0
