@@ -32,7 +32,7 @@ const ConvItem = ({ c, active }: { c: ConvSummary; active: boolean }) => (
 /** The list pane: navigation with counts, then every conversation. */
 export const Home = ({ active, section }: { active: string | null; section: string }) => {
   const convs = useStore((s) => s.convs)
-  const attention = useStore((s) => s.inbox?.filter((i) => i.state === 'unread' || i.state === 'read').length ?? 0)
+  const attention = useStore((s) => s.inbox?.filter((i) => i.state === 'unread').length ?? 0)
   const drafts = useStore((s) => s.drafts?.filter((d) => d.status === 'pending' || d.status === 'approving').length ?? 0)
   const invites = useStore((s) => s.invites?.length ?? 0)
   const live = useStore((s) => s.live)
