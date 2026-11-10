@@ -248,7 +248,15 @@ async function openConv($: Engine, c: Client, conv: string): Promise<void> {
 async function sayHere($: Engine, c: Client, conv: string, text: string, picked: string | null): Promise<void> {
   const body = text.trim()
   if (body === '') return
-  const to = [...new Set([...(picked ? [picked] : []), ...[...body.matchAll(/(^|\s)@([^\s@]{1,24})/g)].map((m) => m[2]!)])]
+  // A typed @name counts even when it is lower-case or only the start of a name, as long as it is unambiguous.
+  const names = ((await read($, timeline))?.others ?? []).map((o) => o.handle)
+  const resolve = (typed: string): string => {
+    const t = typed.toLowerCase()
+    const exact = names.find((n) => n.toLowerCase() === t)
+    const starts = names.filter((n) => n.toLowerCase().startsWith(t))
+    return exact ?? (starts.length === 1 ? starts[0]! : typed)
+  }
+  const to = [...new Set([...(picked ? [picked] : []), ...[...body.matchAll(/(^|\s)@([^\s@]{1,24})/g)].map((m) => resolve(m[2]!))])]
   const r = await c.api('POST', `/convs/${conv}/messages`, { id: newId(), text: body, to_handles: to })
   if (!r.ok && str((r.body as Json).error) === 'recipient_unknown') await c.api('POST', `/convs/${conv}/messages`, { id: newId(), text: body })
   else if (!r.ok) await say($, `Not sent: ${why(r)}`)
