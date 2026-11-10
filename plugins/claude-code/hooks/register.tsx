@@ -116,6 +116,7 @@ async function signIn($: Engine, c: Client, allowHuman: boolean): Promise<string
     if (state === 'confirmed') {
       cursor = 0
       await refresh($, c)
+      await update($, notice, () => null)
       $.ui.toast('Sudare: signed in')
       void $.ui.open({ id: PANE, title: 'Sudare' })
     } else {
@@ -356,6 +357,7 @@ export const register: Register = (on, options) => {
           <Box>
             <Text dimColor>簾 {note} </Text>
             <Button key="clear" plain label="×" onPress={() => update($, notice, () => null)} />
+            <Button key="open-note" plain label="Open Sudare" onPress={() => $.ui.open({ id: PANE, title: 'Sudare' })} />
           </Box>
         )}
         {item && (
