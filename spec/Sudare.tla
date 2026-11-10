@@ -333,4 +333,20 @@ I8 == \A p \in People : (item[p] = "claimed") ~> (item[p] \in {"done", "handed_o
 (* I9 (liveness half): every opened round is eventually closed.            *)
 I9Live == (round = "open") ~> (round = "closed")
 
+-----------------------------------------------------------------------------
+(* The sub-machines above interact only through sessions, tokens and       *)
+(* membership.  Checking their full product is expensive and adds nothing, *)
+(* so each configuration holds the others at rest and explores one.        *)
+
+InboxIdle == item = [p \in People |-> "unread"] /\ claims = {}
+DraftIdle == \A p \in People : draft[p] = "none"
+RoundIdle == round = "none"
+NoteIdle  == head = 0
+LogIdle   == log = << >>
+
+FocusInbox == DraftIdle /\ RoundIdle /\ NoteIdle /\ LogIdle
+FocusGates == InboxIdle /\ RoundIdle /\ NoteIdle
+FocusRound == InboxIdle /\ DraftIdle /\ head <= 1 /\ endorsed = {}
+FocusNote  == InboxIdle /\ DraftIdle /\ RoundIdle /\ LogIdle
+
 =============================================================================

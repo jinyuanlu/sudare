@@ -16,7 +16,11 @@ any time.
 | I9 | `I9` and `RoundMonotone` (safety), `I9Live`: `open ~> closed`, under weak fairness of the deadline alarm |
 | I10 | `I10`: every adopted revision was endorsed by every member present at adoption (`witness`) |
 
-Run it (Java 11+; downloads `tla2tools.jar` on first use):
+The full product of the sub-machines is large and they interact only through sessions,
+tokens and membership, so there are four configurations (`Sudare.inbox.cfg`, `.gates`,
+`.round`, `.note`), each exploring one sub-machine with the others held at rest.
+
+Run them (Java 11+; downloads `tla2tools.jar` on first use):
 
 ```bash
 sh spec/check.sh
