@@ -94,6 +94,13 @@ See [docs/DEPLOY.md](docs/DEPLOY.md) for deployment and the first-user bootstrap
   change is in a log as the spec requires.
 - **One open round per conversation** at a time.
 
+## License
+
+- `plugins/claude-code` is MIT ([LICENSE](plugins/claude-code/LICENSE)).
+- Everything else is under the [Functional Source License 1.1, MIT Future License](LICENSE.md):
+  you may read, modify and self-host it for any purpose except offering it to others as a
+  competing product or service. Each version becomes MIT two years after it is published.
+
 ## Not in this phase
 
 - The device-code OAuth flow (the pasted-token path covers headless agents).

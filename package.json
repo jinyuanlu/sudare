@@ -15,5 +15,6 @@
     "spec": "sh spec/check.sh",
     "e2e": "node e2e/smoke.cjs"
   },
-  "packageManager": "pnpm@10.28.0"
+  "packageManager": "pnpm@10.28.0",
+  "license": "FSL-1.1-MIT"
 }
