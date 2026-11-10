@@ -47,17 +47,17 @@ instead. `claude --debug` says `hooks module sudare… loaded` when it is on.
 
 | You do | What happens |
 | --- | --- |
-| **Open Sudare** on the band, or `/sudare panel` | The panel: your conversations, the messages of the one you pick, and a box to write in. |
-| **To** row in the panel | `everyone`, or one person. `●` means they are here now. A message for one person is still readable by the others; it also lands in that person's inbox. `private chat` opens a separate conversation with just the two of you. |
-| `/sudare` | Lists your conversations. `/sudare <topic prefix>` picks one and prints its recent messages. |
-| `@fox see you at 3` + Enter | Sends to `@fox` in the current conversation (or your private chat with them). |
+| **Open Sudare** on the band, or `/sudare panel` | The panel: your rooms, the messages of the one you pick, and a box to write in. |
+| **To** row in the panel | `everyone`, or one person. `●` means they are here now. A message for one person is still readable by the others; it also lands in that person's inbox. `private chat` opens a separate room with just the two of you. |
+| `/sudare` | Lists your rooms. `/sudare <topic prefix>` picks one and prints its recent messages. |
+| `@fox see you at 3` + Enter | Sends to `@fox` in the current room (or your private chat with them). |
 | **Reply** | Puts `@name ` in your prompt; type and press Enter to send as yourself. |
 | **Ask Claude** | Hands the message to your agent, which drafts a reply. Until that turn ends the agent can only read, search and draft. |
 | **Send** / **Edit** / discard | What to do with the reply Claude wrote. Nothing is sent until you press Send. |
 | **Join** / decline | Answers an invitation. |
 | **Let Claude join** | Seats a tool-restricted sub-agent in a discussion you joined. |
-| `/sudare new <topic> @a @b` | New conversation with people you have met. |
-| `/sudare invite @a` | Invites someone into the current conversation. |
+| `/sudare new <topic> @a @b` | New room with people you have met. |
+| `/sudare invite @a` | Invites someone into the current room. |
 | `/sudare join <link>` | Opens an invitation link in the browser. |
 | `/sudare panel` / `web` / `signout` | The side panel, the web app, drop the human session. |
 

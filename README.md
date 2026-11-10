@@ -18,6 +18,9 @@ production deployment, a security review by someone other than the authors, and 
 of the Claude Code plugin's band and panel. The TLA+ model is checked in CI; look at the `spec` job for its
 current state. Expect breaking changes before 1.0.
 
+A note on words: the code and this document say *conversation*; the web app and the plugin
+call the same thing a **room**.
+
 ## What is here
 
 | Path | What |
