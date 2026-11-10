@@ -113,7 +113,10 @@ const startSession = async (c: C, proof: Parameters<typeof issueSession>[1]) => 
 
 api.get('/join/:code/check', publicRead, async (c) => {
   const i = await inviteByCode(c.env, c.req.param('code') ?? '')
-  return c.json({ valid: !!i && i.used_at === null && inviteOpenTo(i, i.bound), registered: !!i?.bound })
+  const valid = !!i && i.used_at === null && inviteOpenTo(i, i.bound)
+  // Whoever holds the link may know what it is for before making a passkey.
+  const card = i && valid ? await inviteCard(c.env, i) : null
+  return c.json({ valid, registered: !!i?.bound, topic: card?.topic ?? null, by: card?.by ?? null, members: card?.members ?? 0 })
 })
 
 api.post('/auth/register/options', publicWrite, async (c) => {
@@ -242,7 +245,11 @@ api.post('/push/unsubscribe', web, async (c) => {
 
 // -- conversations ------------------------------------------------------------------
 
-api.get('/convs', anyHuman, async (c) => c.json(await inbox(c).convs()))
+api.get('/convs', anyHuman, async (c) => {
+  const list = await inbox(c).convs()
+  const priv = await directory(c.env).privateChats(me(c), list.map((x) => x.id))
+  return c.json(list.map((x) => ({ ...x, dm_with: priv.get(x.id) ?? null })))
+})
 
 /** The same person met in several rooms gets the same key, so clients can list them once. It means nothing to anyone else. */
 const personKey = async (viewer: PrincipalId, other: PrincipalId): Promise<string> => (await sha256(`${viewer}|${other}`)).slice(0, 12)
@@ -267,10 +274,12 @@ api.post('/convs', anyHuman, async (c) => {
 
 api.get('/convs/:id', anyHuman, async (c) => {
   const id = param(c, 'id', isConvId)
-  const [view, active] = await Promise.all([conv(c, id).view(me(c)), directory(c.env).activeIn(id)])
+  const [view, active, priv] = await Promise.all([conv(c, id).view(me(c)), directory(c.env).activeIn(id), directory(c.env).privateChats(me(c), [id])])
   if (!view.ok) return send(c, view)
+  const isPrivate = await directory(c.env).isPrivateChat(id)
   // "Here now": the person's client was connected or polling within the last two minutes.
-  return c.json({ ...view.value, members: view.value.members.map((m) => ({ ...m, active: m.me || (!m.left && active.has(m.alias)) })) })
+  // A private chat stays between its two people: nobody is invited into it.
+  return c.json({ ...view.value, can_invite: view.value.can_invite && !isPrivate, dm_with: isPrivate ? (priv.get(id) ?? '') : null, members: view.value.members.map((m) => ({ ...m, active: m.me || (!m.left && active.has(m.alias)) })) })
 })
 
 api.patch('/convs/:id', anyHuman, async (c) => {
@@ -289,6 +298,7 @@ api.patch('/convs/:id', anyHuman, async (c) => {
 
 api.post('/convs/:id/invites', anyHuman, async (c) => {
   const id = param(c, 'id', isConvId)
+  if (await directory(c.env).isPrivateChat(id)) return fail('invite_forbidden')
   const input = await body(c, z.union([z.object({ to: zAliasRef }), z.object({ link: z.literal(true) })]))
   return 'to' in input
     ? send(c, await inviteMember(c.env, me(c), id, input.to as AliasRef).then((r) => (r.ok ? ok({ invite: r.value }) : r)), 201)

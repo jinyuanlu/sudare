@@ -56,7 +56,7 @@ const q = (params: Record<string, string | number | null | undefined>): string =
 
 export type Ceremony<O> = { id: string; options: O }
 export type Assertion = { id: string; response: unknown }
-export type JoinCheck = { valid: boolean; registered: boolean }
+export type JoinCheck = { valid: boolean; registered: boolean; topic: string | null; by: string | null; members: number }
 export type JoinCard = Omit<InviteView, 'suggested_handle'> & { suggested_handle: string | null; joined: boolean }
 export type Created = { conv: ConvId; existing: boolean; joined: number; invited: number }
 export type NoteRead = { note: NoteView; rev: number; title: string; text: string }

@@ -58,7 +58,7 @@ const load = async (c: Client): Promise<SudareSnapshot | null> => {
   )
   if (![convs, inbox, drafts, invites, seats].every((r) => r?.ok)) return null
   return {
-    convs: list(convs!.body).map((x): SudareConv => ({ id: str(x.id), topic: str(x.topic), unread: num(x.unread), pending: num(x.pending), round: str(x.round) || null })),
+    convs: list(convs!.body).map((x): SudareConv => ({ id: str(x.id), topic: str(x.dm_with) ? `${str(x.dm_with)} (private)` : str(x.topic), unread: num(x.unread), pending: num(x.pending), round: str(x.round) || null })),
     inbox: list(inbox!.body).map((x): SudareItem => ({ msg: str(x.msg), conv: str(x.conv), topic: str(x.topic), from: str(x.from), text: str(x.text), state: str(x.state) })),
     drafts: list(drafts!.body).map((x): SudareDraft => ({ id: str(x.id), topic: str(x.topic) || null, kind: draftKind(x.target), text: str(x.text), device: str(x.device_name), status: str(x.status) })),
     invites: list(invites!.body).map((x): SudareInvite => ({ id: str(x.id), topic: str(x.topic), by: str(x.by), members: num(x.members) })),
@@ -87,7 +87,7 @@ const loadTimeline = async (c: Client, conv: string, isSeen: boolean): Promise<S
   // Only a person looking at it counts as reading; a background refresh does not.
   if (last && isSeen) await c.api('POST', `/convs/${conv}/read`, { seq: num(last.seq) })
   const others = members.filter((m) => m.me !== true && m.left !== true).map((m): SudarePerson => ({ handle: str(m.handle), alias: str(m.alias), isHere: m.active === true }))
-  return { conv, topic: str(v.topic), me, others, lines }
+  return { conv, topic: str(v.dm_with) ? `${str(v.dm_with)} (private)` : str(v.topic), me, others, lines }
 }
 
 // The position in the person's inbox log this session has seen. Module state: a reload starts over, which only costs one refetch.

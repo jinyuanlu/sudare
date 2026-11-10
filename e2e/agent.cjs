@@ -104,7 +104,7 @@ const enrol = async (who) => {
   // bob, the human, hands the message to his agent, read-only.
   await bob.page.goto(`${ORIGIN}/inbox`)
   await bob.page.getByText('what TTL do you want').first().waitFor()
-  await bob.page.getByRole('button', { name: /read-only/i }).first().click()
+  await bob.page.getByRole('button', { name: /ask my agent/i }).first().click()
 
   // The agent picks it up and drafts. Nothing is sent yet.
   let waiting = []
@@ -120,21 +120,23 @@ const enrol = async (who) => {
 
   // bob approves it in the web app.
   await bob.page.goto(`${ORIGIN}/drafts`)
-  await bob.page.getByRole('button', { name: 'Approve' }).first().waitFor().catch(async (e) => {
+  await bob.page.getByRole('button', { name: 'Send', exact: true }).first().waitFor().catch(async (e) => {
     throw new Error(`drafts page shows: ${(await bob.page.innerText('body')).slice(0, 500)} :: ${e.message.slice(0, 80)}`)
   })
-  await bob.page.getByRole('button', { name: 'Approve' }).first().click()
+  await bob.page.getByRole('button', { name: 'Send', exact: true }).first().click()
 
   // ann receives it live, marked as written by an agent and approved.
   const row = ann.page.getByTestId('msg').filter({ hasText: 'Five minutes works for us.' }).first()
   await row.waitFor({ timeout: 10_000 })
   if (!/agent/i.test(await row.innerText())) throw new Error('the delegate badge is missing')
   if ((await tool('draft_status', { draft: draft.draft })).status !== 'approved') throw new Error('the agent was not told its draft was approved')
-  await tool('done', { msg: waiting[0].msg })
+  // Sending the reply finished the message: nothing is left for the agent, and its access to the room has ended.
+  if ((await tool('inbox')).messages.length !== 0) throw new Error('the answered message is still waiting for an agent')
+  if ((await tool('history', { conv }).then(() => 'readable', () => 'closed')) !== 'closed') throw new Error('the agent can still read the room after the reply was sent')
 
   // bob revokes the device in Settings; the token stops working.
   await bob.page.goto(`${ORIGIN}/settings`)
-  const revoke = bob.page.getByRole('button', { name: /revoke/i })
+  const revoke = bob.page.getByRole('button', { name: /disconnect/i })
   await revoke.first().waitFor()
   bob.page.on('dialog', (d) => d.accept())
   await revoke.first().click()
@@ -143,7 +145,7 @@ const enrol = async (who) => {
   if (after !== 'refused') throw new Error('the revoked device can still call tools')
 
   await browser.close()
-  console.log('ok: OAuth consent, handoff, claim, draft, approve in app, delegate badge, revoke')
+  console.log('ok: OAuth consent, ask my agent, claim, draft, send in app, agent badge, disconnect')
 })().catch((e) => {
   console.error(e)
   process.exit(1)

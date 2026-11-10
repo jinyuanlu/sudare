@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'preact/hooks'
 import { LIMITS, type AliasId, type ConvEvent, type ConvId, type ConvView } from '@sudare/protocol'
-import { api } from '../api'
+import { ApiFailure, api } from '../api'
 import { namesOf, useConv } from '../data'
 import { useAction, useVisible } from '../hooks'
 import { t } from '../i18n'
+import { membersText } from '../util'
 import { Link, navigate } from '../router'
 import { refresh, useStore } from '../store'
 import { ErrorNote, Field, Loading, Modal, Page, QuickStart } from '../ui'
@@ -74,10 +75,10 @@ const Menu = ({ view, openRound, onPanel, onError }: MenuProps) => {
       <div class="menu-items" role="menu">
         {item(t('conv.members'), () => onPanel('members'))}
         {view.can_invite ? item(t('conv.invite'), () => onPanel('members')) : null}
-        {item(t('conv.newTopic'), () => navigate(`/new?parent=${view.id}`))}
+        {view.dm_with ? null : item(t('conv.newTopic'), () => navigate(`/new?parent=${view.id}`))}
         {item(t('notes.title'), () => navigate(`/c/${view.id}/notes`))}
         {active && !openRound ? item(t('round.openAction'), () => onPanel('round')) : null}
-        {active ? item(t('conv.rename'), () => onPanel('rename')) : null}
+        {active && !view.dm_with ? item(t('conv.rename'), () => onPanel('rename')) : null}
         {active && me?.creator ? item(t('conv.retention'), () => onPanel('retention')) : null}
         {!me?.left ? item(t('conv.leave'), confirmed(t('conv.leaveConfirm'), () => api.leave(view.id), () => navigate('/'))) : null}
         {active && (me?.creator || creatorGone) ? item(t('conv.archive'), confirmed(t('conv.archiveConfirm'), () => api.archive(view.id), () => undefined)) : null}
@@ -107,7 +108,14 @@ export const ConvScreen = ({ id, at }: { id: ConvId; at: number | null }) => {
   }, [tl.ready, visible, atBottom, lastSeq])
 
   const [showQuick, setShowQuick] = useState(() => localStorage.getItem('sudare.quick') !== 'hidden')
-  if (!view) return <Page title={t('conv.title')}>{conv.error ? <ErrorNote error={conv.error} /> : <Loading />}</Page>
+  if (!view) {
+    const isGone = conv.error instanceof ApiFailure && (conv.error.code === 'not_member' || conv.error.code === 'conv_missing')
+    return (
+      <Page title={t('conv.title')}>
+        {isGone ? <div class="alone"><p>{t('conv.gone')}</p><Link class="button" href="/">{t('notfound.home')}</Link></div> : conv.error ? <ErrorNote error={conv.error} /> : <Loading />}
+      </Page>
+    )
+  }
 
   const joinedLater = new Map<AliasId, string>()
   for (const e of tl.events) if (e.body.kind === 'member_joined') joinedLater.set(e.body.alias, e.body.handle)
@@ -125,8 +133,8 @@ export const ConvScreen = ({ id, at }: { id: ConvId; at: number | null }) => {
 
   return (
     <Page
-      wide title={view.topic}
-      sub={<button type="button" class="link" onClick={() => setPanel('members')}>{t('common.members', { n: active.length })} · {t('conv.hereNow', { n: active.filter((m) => m.active).length })}{view.archived ? ` · ${t('home.archived')}` : ''}</button>}
+      wide title={view.dm_with ? t('conv.privateWith', { who: view.dm_with }) : view.topic}
+      sub={<button type="button" class="link" onClick={() => setPanel('members')}>{membersText(active.length)} · {t('conv.hereNow', { n: active.filter((m) => m.active).length })}{view.archived ? ` · ${t('home.archived')}` : ''}</button>}
       actions={<>{view.can_invite && !view.archived ? <button type="button" onClick={() => setPanel('members')}>{t('conv.invite')}</button> : null}<Link class="button" href={`/c/${id}/notes`}>{t('notes.title')}</Link><Menu view={view} openRound={round !== null} onPanel={setPanel} onError={setFailure} /></>}
     >
       <div class="conv">

@@ -50,6 +50,8 @@ export type ConvView = {
   me: AliasId
   from_seq: number
   can_invite: boolean
+  /** A private chat: the other person's name here. Absent for an ordinary room. */
+  dm_with?: string | null
   members: MemberView[]
   rounds: RoundView[]
 }
@@ -66,6 +68,7 @@ export type ConvSummary = {
   members: number
   archived: boolean
   round: RoundId | null
+  dm_with?: string | null
 }
 
 export type InboxItem = {

@@ -10,7 +10,7 @@ import { confirmLink, registerWithInvite, signIn } from '../passkey'
 import { Link, navigate } from '../router'
 import { refresh } from '../store'
 import { ErrorNote, Field, Loading, QuickStart, Solo } from '../ui'
-import { fmtDate, isCode } from '../util'
+import { fmtDate, isCode, membersText } from '../util'
 
 export const Login = ({ next, me }: { next: string; me: Me | null | undefined }) => {
   const act = useAction()
@@ -49,7 +49,7 @@ export const InviteCard = ({ topic, by, members, expires, suggested, onJoin, onD
     <form class="card" onSubmit={join}>
       <h2>{topic || t('join.untitled')}</h2>
       <p class="muted small">
-        {t('join.by', { by })}{members > 0 ? ` · ${t('common.members', { n: members })}` : ''} · {t('common.expires', { when: fmtDate(expires) })}
+        {t('join.by', { by })}{members > 0 ? ` · ${membersText(members)}` : ''} · {t('common.expires', { when: fmtDate(expires) })}
       </p>
       <Field label={t('join.handle')} hint={t('join.handleHint')}>
         <input data-testid="handle" value={handle} maxLength={24} required autocomplete="nickname" onInput={(e) => setHandle(e.currentTarget.value)} />
@@ -91,10 +91,11 @@ export const Join = ({ code, me }: { code: string; me: Me | null | undefined }) 
     if (me === undefined || (!me && check.loading)) return <Loading />
     if (me) return <JoinSignedIn code={code} />
     if (check.error) return <ErrorNote error={check.error} />
-    const { valid, registered } = check.data ?? { valid: false, registered: false }
+    const { valid, registered, topic, by, members } = check.data ?? { valid: false, registered: false, topic: null, by: null, members: 0 }
     return (
       <>
-        {valid || registered ? <p>{t(registered ? 'join.registered' : 'join.lead')}</p> : <p class="error" role="alert">{t('err.invite_invalid')}</p>}
+        {valid && topic ? <p class="invited-to"><strong>{t('join.invitedTo', { by: by ?? '', topic })}</strong>{members > 0 ? <span class="muted small"> · {membersText(members)}</span> : null}</p> : null}
+        {valid || registered ? <p>{t(registered ? 'join.registered' : 'join.lead')}</p> : <p class="error" role="alert">{t('join.unusable')}</p>}
         {valid && !registered ? (
           <button type="button" class="primary big" data-testid="register" disabled={act.busy} onClick={() => void act.run(() => registerWithInvite(code))}>
             {t('join.register')}
@@ -108,7 +109,8 @@ export const Join = ({ code, me }: { code: string; me: Me | null | undefined }) 
       </>
     )
   }
-  return <Solo title={t('join.title')}>{body()}<QuickStart /></Solo>
+  const isUnusable = !me && check.data !== undefined && !check.data.valid && !check.data.registered
+  return <Solo title={t(isUnusable ? 'join.unusableTitle' : 'join.title')}>{body()}<QuickStart /></Solo>
 }
 
 export const LinkScreen = ({ id }: { id: string }) => {

@@ -100,6 +100,12 @@ describe('identity and joining', () => {
     const first = await ann.post('/convs', { topic: 'ann · bob', members: [bobRef], dm: true })
     const second = await bob.post('/convs', { topic: 'again', members: [{ conv, alias: await aliasOf(bob, conv, 'ann') }], dm: true })
     expect(second.body).toMatchObject({ conv: first.body.conv, existing: true })
+    // Each sees it as a private chat with the other, and nobody can be invited into it.
+    await eventually(async () => (await ann.get(`/convs/${first.body.conv}`)).body.dm_with === 'bob', 'private chat is named after the other person')
+    expect((await bob.get(`/convs/${first.body.conv}`)).body).toMatchObject({ dm_with: 'ann', can_invite: false })
+    expect((await bob.convs()).find((x) => x.id === first.body.conv)).toMatchObject({ dm_with: 'ann' })
+    expect((await ann.post(`/convs/${first.body.conv}/invites`, { link: true })).body.error).toBe('invite_forbidden')
+    expect((await ann.get(`/convs/${conv}`)).body.dm_with).toBeNull()
 
     const solo = (await ann.post('/convs', { topic: 'Solo' })).body.conv as ConvId
     const invited = await ann.post(`/convs/${solo}/invites`, { to: bobRef })

@@ -30,6 +30,9 @@ export const errText = (e: unknown): string => {
   return t('err.other', { code: e instanceof Error ? e.name : 'unknown' })
 }
 
+/** "1 member" or "3 members". */
+export const membersText = (n: number): string => t(n === 1 ? 'common.member1' : 'common.members', { n })
+
 export const isCode = (e: unknown, code: ApiFailure['code']): boolean => e instanceof ApiFailure && e.code === code
 
 export const base64UrlToBytes = (value: string): Uint8Array<ArrayBuffer> => {

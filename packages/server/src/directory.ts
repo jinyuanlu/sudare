@@ -65,6 +65,16 @@ export const directory = (env: Env) => {
     expireDevices: () => run(db, `UPDATE devices SET revoked_at = ? WHERE revoked_at IS NULL AND expires_at IS NOT NULL AND expires_at <= ?`, Date.now(), Date.now()),
 
     // conversations and aliases
+    /** Of these rooms, the private chats, each with the other person's name there. */
+    privateChats: async (me: PrincipalId, convs: ConvId[]): Promise<Map<ConvId, string>> => {
+      if (convs.length === 0) return new Map()
+      const marks = convs.map(() => '?').join(',')
+      const rows = await all<{ conv: ConvId; handle: string }>(db,
+        `SELECT c.id AS conv, a.handle AS handle FROM convs c JOIN aliases a ON a.conv = c.id AND a.principal != ? AND a.left_at IS NULL
+         WHERE c.dm_key IS NOT NULL AND c.id IN (${marks})`, me, ...convs)
+      return new Map(rows.map((r) => [r.conv, r.handle]))
+    },
+    isPrivateChat: async (conv: ConvId) => (await first<{ n: number }>(db, `SELECT count(*) AS n FROM convs WHERE id = ? AND dm_key IS NOT NULL`, conv))?.n === 1,
     reserveDm: (conv: ConvId, key: string) =>
       run(db, `INSERT INTO convs (id, topic, dm_key, created_at) VALUES (?, '', ?, ?) ON CONFLICT(dm_key) DO NOTHING`, conv, key, Date.now()),
     dm: (key: string) => first<{ id: ConvId }>(db, `SELECT id FROM convs WHERE dm_key = ?`, key),

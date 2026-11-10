@@ -3,7 +3,7 @@ import { t } from '../i18n'
 import { Link } from '../router'
 import { useStore } from '../store'
 import { Badge, Loading } from '../ui'
-import { fmtTime } from '../util'
+import { fmtTime, membersText } from '../util'
 
 const NavItem = ({ href, label, n, active }: { href: string; label: string; n?: number; active: boolean }) => (
   <Link href={href} class="nav-item" aria-current={active ? 'page' : undefined}>
@@ -15,7 +15,7 @@ const NavItem = ({ href, label, n, active }: { href: string; label: string; n?: 
 const ConvItem = ({ c, active }: { c: ConvSummary; active: boolean }) => (
   <li>
     <Link href={`/c/${c.id}`} class={`conv-item${c.archived ? ' dim' : ''}`} data-testid="conv-item" aria-current={active ? 'page' : undefined}>
-      <span class="conv-topic">{c.topic}</span>
+      <span class="conv-topic">{c.dm_with ? t('conv.privateWith', { who: c.dm_with }) : c.topic}</span>
       <span class="conv-meta">
         {c.round ? <span class="tag round-tag">{t('home.round')}</span> : null}
         {c.archived ? <span class="tag">{t('home.archived')}</span> : null}
@@ -23,7 +23,7 @@ const ConvItem = ({ c, active }: { c: ConvSummary; active: boolean }) => (
         <Badge n={c.unread} label={t('home.unread')} />
       </span>
       <span class="muted small">
-        {t('home.as', { handle: c.handle })} · {t('common.members', { n: c.members })}{c.last_ts > 0 ? ` · ${fmtTime(c.last_ts)}` : ''}
+        {t('home.as', { handle: c.handle })}{c.dm_with ? '' : ` · ${membersText(c.members)}`}{c.last_ts > 0 ? ` · ${fmtTime(c.last_ts)}` : ''}
       </span>
     </Link>
   </li>

@@ -207,3 +207,7 @@ textarea { resize: vertical; line-height: 1.4; }
 
 .alone { margin: 1rem .75rem; padding: 1rem; border: 1px dashed var(--line, #d6d2c4); border-radius: .75rem; text-align: center; }
 .alone p { margin: 0 0 .75rem; }
+
+select { max-width: 100%; }
+.page, .solo { min-width: 0; overflow-wrap: anywhere; }
+.invited-to { font-size: 1.05rem; }
