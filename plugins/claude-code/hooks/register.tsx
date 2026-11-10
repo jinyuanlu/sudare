@@ -65,7 +65,8 @@ const loadTimeline = async (c: Client, conv: string): Promise<SudareTimeline | n
   })
   const last = events[events.length - 1]
   if (last) void c.api('POST', `/convs/${conv}/read`, { seq: num(last.seq) })
-  return { conv, topic: str(v.topic), me, lines }
+  const others = members.filter((m) => m.me !== true && m.left !== true).map((m) => str(m.handle))
+  return { conv, topic: str(v.topic), me, others, lines }
 }
 
 // The position in the person's inbox log this session has seen. Module state: a reload starts over, which only costs one refetch.
@@ -175,7 +176,7 @@ async function sayHere($: Engine, c: Client, conv: string, text: string): Promis
 }
 
 const transcript = (t: SudareTimeline): string =>
-  t.lines.length === 0 ? '(no messages yet)' : t.lines.map((l) => `${l.isMine ? 'you' : `@${l.from}`}${l.via === 'delegate' ? ' (via agent)' : l.via === 'autonomous' ? ' (agent, round)' : ''}: ${l.text}`).join('\n')
+  `you (${t.me})${t.others.length ? ` with ${t.others.map((h) => `@${h}`).join(', ')}` : ', nobody else here yet'}\n` + (t.lines.length === 0 ? '(no messages yet)' : t.lines.map((l) => `${l.isMine ? 'you' : `@${l.from}`}${l.via === 'delegate' ? ' (via agent)' : l.via === 'autonomous' ? ' (agent, round)' : ''}: ${l.text}`).join('\n'))
 
 /** A one-time invitation link for this conversation, copied to the clipboard. */
 async function inviteLink($: Engine, c: Client, conv: string, surface: 'terminal' | 'desktop' | 'vscode' | 'mobile'): Promise<void> {
@@ -328,7 +329,7 @@ export const register: Register = (on, options) => {
     if (server === '') return next(e)
     const { Box, Button, Text } = $.ui.resolve(e)
     const c = makeClient($, server, keep)
-    const [snap, pending, here, isIn, note] = [await read($, snapshot), await read($, link), await read($, current), await read($, signedIn), await read($, notice)]
+    const [snap, pending, here, isIn, note, shown] = [await read($, snapshot), await read($, link), await read($, current), await read($, signedIn), await read($, notice), await read($, timeline)]
 
     if (pending) {
       return (
@@ -355,7 +356,7 @@ export const register: Register = (on, options) => {
       const unread = snap.convs.reduce((n, x) => n + x.unread, 0)
       return (
         <Box>
-          <Text dimColor>簾 {unread > 0 ? `${unread} unread ` : ''}</Text>
+          <Text dimColor>簾 {unread > 0 ? `${unread} unread ` : shown && shown.others.length === 0 ? 'nobody else here yet ' : ''}</Text>
           <Button key="open" plain label="Open Sudare" onPress={() => $.ui.open({ id: PANE, title: 'Sudare' })} />
         </Box>
       )
@@ -432,8 +433,12 @@ export const register: Register = (on, options) => {
         {snap.convs.length === 0 && <Text dimColor>No conversations yet. Join one with an invitation link.</Text>}
         {shown && (
           <Box flexDirection="column">
-            <Text bold>{clip(shown.topic, 50)}</Text>
-            {shown.lines.length === 0 && <Text dimColor>Nobody has written yet. Say something below, or invite someone.</Text>}
+            <Text>
+              <Text bold>{clip(shown.topic, 50)}</Text>
+              <Text dimColor>{shown.others.length > 0 ? `  you (${shown.me}) with ${shown.others.map((h) => `@${h}`).join(', ')}` : `  you (${shown.me})`}</Text>
+            </Text>
+            {shown.others.length === 0 && <Text>Nobody else is here yet. Press Invite below, then open the copied link in a private browser window to add a second person.</Text>}
+            {shown.others.length > 0 && shown.lines.length === 0 && <Text dimColor>Nobody has written yet. Write below; everyone here receives it.</Text>}
             {shown.lines.slice(-room).map((l) => (
               <Text>
                 <Text bold={!l.isMine} dimColor={l.isMine}>{l.isMine ? 'you' : l.from}</Text>

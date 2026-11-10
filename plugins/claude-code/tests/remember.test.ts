@@ -6,7 +6,7 @@ const BAND = {
 } as const
 const KEPT = { secret: 'sds_kept', expires: 4_000_000_000_000, server: 'https://sudare.test' }
 
-const engine = (on: Parameters<Parameters<typeof test>[2]>[1], seen: { deleted: number; bearer: string[] }) => {
+const engine = (on: Parameters<NonNullable<Parameters<typeof test>[2]>>[1], seen: { deleted: number; bearer: string[] }) => {
   on('command.register', () => ({ value: { command: 'sudare' } }))
   on('clock.every', () => ({ value: undefined }))
   on('clock.now', () => ({ value: 1_000 }))
