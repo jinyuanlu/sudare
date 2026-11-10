@@ -1,6 +1,6 @@
 {
   "name": "sudare",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Sudare: message people from behind your agent. Inbox band, in-place approvals, discussion rounds.",
   "types": "./types/index.d.ts",
   "userConfig": {
@@ -23,7 +23,7 @@
     "rememberSignIn": {
       "type": "string",
       "title": "Remember sign-in on this machine",
-      "description": "on: always keep the sign-in on this machine for 7 days. off: only when you press \"Sign in for 7 days\". Kept sign-ins can be read by anything running as you on this machine, your agent included.",
+      "description": "on: every sign-in is kept for 7 days on this computer. off: you choose each time you sign in (this session, or 7 days on this computer). A kept sign-in can be read by anything running as you on this computer, your agent included.",
       "options": [
         "off",
         "on"

@@ -220,9 +220,13 @@ async function setKeep($: Engine, c: Client, on: boolean): Promise<void> {
 }
 
 /** One press: choose to stay signed in on this machine, and sign in. */
-async function signInKept($: Engine, server: string, always: boolean): Promise<void> {
-  await setKeep($, makeClient($, server, always), true)
-  await say($, await signIn($, makeClient($, server, always), true)) // a fresh client: it reads the choice just made
+/**
+ * One press chooses how long and signs in: for this session (forgotten when
+ * Claude Code closes) or for 7 days on this computer (kept in the plugin's storage).
+ */
+async function signInFor($: Engine, server: string, always: boolean, isKeeping: boolean, isAllowed: boolean): Promise<void> {
+  await setKeep($, makeClient($, server, always), isKeeping)
+  await say($, await signIn($, makeClient($, server, always), isAllowed)) // a fresh client: it reads the choice just made
 }
 
 async function closeHelp($: Engine): Promise<void> {
@@ -421,13 +425,11 @@ export const register: Register = (on, options) => {
     }
     if (!isIn) {
       return (
-        <Box>
-          <Text dimColor>簾 Sudare </Text>
-          <Button key="signin" label="Sign in" onPress={async () => void (await say($, await signIn($, c, allowHuman)))} />
-          {allowHuman && <Text>  </Text>}
-          {allowHuman && !isKept && <Button key="signin-keep" label="Sign in for 7 days" onPress={() => signInKept($, server, keep)} />}
-          {allowHuman && isKept && <Button key="keep-off" plain label="(stays signed in for 7 days · change)" onPress={() => setKeep($, c, false)} />}
-          {note && <Text dimColor>  {note}</Text>}
+        <Box gap={2}>
+          <Text dimColor>簾 Sudare · sign in for</Text>
+          <Button key="signin" label="this session" {...(!isKept ? { variant: 'primary' as const } : {})} onPress={() => signInFor($, server, keep, false, allowHuman)} />
+          {allowHuman && <Button key="signin-keep" label="7 days on this computer" {...(isKept ? { variant: 'primary' as const } : {})} onPress={() => signInFor($, server, keep, true, allowHuman)} />}
+          {note && <Text dimColor>{note}</Text>}
         </Box>
       )
     }
@@ -502,8 +504,12 @@ export const register: Register = (on, options) => {
     if (!isIn) {
       return (
         <Box flexDirection="column">
-          <Text>Not signed in. Sending and approving from here needs a short-lived human session.</Text>
-          <Button key="signin" variant="primary" label="Sign in with passkey" onPress={async () => void (await say($, await signIn($, c, allowHuman)))} />
+          <Text>Sign in to read and write here.</Text>
+          <Box gap={2}>
+            <Text dimColor>Sign in for</Text>
+            <Button key="signin" label="this session" onPress={() => signInFor($, server, keep, false, allowHuman)} />
+            {allowHuman && <Button key="signin-keep" label="7 days on this computer" onPress={() => signInFor($, server, keep, true, allowHuman)} />}
+          </Box>
           <Button key="web" label="Open the web app instead" onPress={() => c.open(c.base)} />
         </Box>
       )

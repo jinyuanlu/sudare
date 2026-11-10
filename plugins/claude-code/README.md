@@ -17,8 +17,8 @@ budgets) is enforced by the server.
 Then two clicks:
 
 1. `/mcp` → `sudare` → **Authenticate**. Your browser opens; press **Allow**.
-2. Press **Sign in** on the Sudare line above the prompt; your browser opens once more,
-   showing a short code. If Claude Code shows the same code, press **Sign in** there.
+2. On the Sudare line above the prompt, choose how long to sign in for: **this session**
+   or **7 days on this computer**. Your browser opens once more and asks for your passkey.
 
 The first connects your agent (it can read what you hand it and write drafts). The second
 lets *you* send and approve from Claude Code for 8 hours; it is kept in memory only.
@@ -73,7 +73,7 @@ instead. `claude --debug` says `hooks module sudare… loaded` when it is on.
 A local attacker who can read this process's memory can still take the session. If that
 matters to you, turn it off.
 
-**Sign in for 7 days** (the second button next to Sign in; the
+**7 days on this computer** (the second sign-in button; the
 **Remember sign-in on this machine** setting forces it on) keeps the human session in the
 plugin's storage for 7 days, so you do not sign in after every restart. The confirmation
 page says so before you agree. The cost is the protection above: anything running as you on
