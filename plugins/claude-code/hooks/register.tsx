@@ -79,7 +79,9 @@ async function refresh($: Engine, c: Client): Promise<void> {
   const next = isSignedIn() ? await load(c) : null
   await update($, signedIn, () => isSignedIn())
   await update($, snapshot, () => next ?? EMPTY)
-  const here = await read($, current)
+  const picked = await read($, current)
+  const here = picked ?? next?.convs[0]?.id ?? null
+  if (here !== picked) await update($, current, () => here)
   const shown = here && isSignedIn() ? await loadTimeline(c, here).catch(() => null) : null
   await update($, timeline, () => shown)
   const waiting = next ? next.inbox.filter((i) => i.state === 'unread').length + next.drafts.length + next.invites.length : 0
@@ -118,7 +120,6 @@ async function signIn($: Engine, c: Client, allowHuman: boolean): Promise<string
       await refresh($, c)
       await update($, notice, () => null)
       $.ui.toast('Sudare: signed in')
-      void $.ui.open({ id: PANE, title: 'Sudare' })
     } else {
       await say($, 'Sign-in expired. Run /sudare signin to try again.')
     }
@@ -175,6 +176,15 @@ async function sayHere($: Engine, c: Client, conv: string, text: string): Promis
 
 const transcript = (t: SudareTimeline): string =>
   t.lines.length === 0 ? '(no messages yet)' : t.lines.map((l) => `${l.isMine ? 'you' : `@${l.from}`}${l.via === 'delegate' ? ' (via agent)' : l.via === 'autonomous' ? ' (agent, round)' : ''}: ${l.text}`).join('\n')
+
+/** A one-time invitation link for this conversation, copied to the clipboard. */
+async function inviteLink($: Engine, c: Client, conv: string, surface: 'terminal' | 'desktop' | 'vscode' | 'mobile'): Promise<void> {
+  const r = await c.api('POST', `/convs/${conv}/invites`, { link: true })
+  const url = str((r.body as Json).url)
+  if (!r.ok || url === '') return void (await say($, `No link: ${str((r.body as Json).error) || r.status}`))
+  const copied = await $.ui.copy({ text: url, surface }).catch(() => ({ isCopied: false }))
+  await say($, `${copied.isCopied ? 'Invitation link copied' : 'Invitation link'} (works once, 7 days): ${url}`)
+}
 
 async function handOff($: Engine, c: Client, item: SudareItem, mode: 'readonly' | 'full'): Promise<void> {
   if (!(await post($, c, `/inbox/${item.msg}/handoff`, { mode }, `Handed @${item.from}'s message to your agent (${mode}).`))) return
@@ -281,9 +291,8 @@ export const register: Register = (on, options) => {
       const hit = snap.convs.find((x) => x.topic.toLowerCase().startsWith(prefix))
       if (!hit) return { text: `No conversation starts with "${e.args.trim()}".` }
       await openConv($, c, hit.id)
-      void $.ui.open({ id: PANE, title: 'Sudare' })
       const shown = await read($, timeline)
-      return { text: `── ${hit.topic} ──\n${shown ? transcript(shown) : '(could not load)'}\n\nType "@handle message" to send, or write in the panel.` }
+      return { text: `── ${hit.topic} ──\n${shown ? transcript(shown) : '(could not load)'}\n\nType "@handle message" to send, or /sudare panel.` }
     }
     const here = await read($, current)
     const lines = snap.convs.map((x) => `${x.id === here ? '▸' : ' '} ${x.topic}${x.unread ? `  (${x.unread} unread)` : ''}${x.pending ? `  [${x.pending} for you]` : ''}${x.round ? '  ⟳ round' : ''}`)
@@ -402,8 +411,8 @@ export const register: Register = (on, options) => {
     const { Box, Button, Input, Text } = $.ui.resolve(e)
     if (server === '') return <Text dimColor>Set the Sudare server URL in /config.</Text>
     const c = makeClient($, server)
-    const [snap, here, isIn, shown] = [await read($, snapshot), await read($, current), await read($, signedIn), await read($, timeline)]
-    const room = Math.max(5, (e.viewport?.rows ?? 30) - snap.convs.length - 12)
+    const [snap, here, isIn, shown, note] = [await read($, snapshot), await read($, current), await read($, signedIn), await read($, timeline), await read($, notice)]
+    const room = Math.max(8, (e.viewport?.rows ?? 30) - snap.convs.length - 10)
     if (!isIn) {
       return (
         <Box flexDirection="column">
@@ -414,28 +423,34 @@ export const register: Register = (on, options) => {
       )
     }
     const rounds = snap.convs.filter((x) => x.round && !snap.seats.some((s) => s.round === x.round))
+    const others = snap.convs.filter((x) => x.id !== here)
     return (
-      <Box flexDirection="column">
-        <Text bold>Conversations</Text>
-        {snap.convs.length === 0 && <Text dimColor>None yet.</Text>}
-        {snap.convs.map((x) => (
-          <Button key={`conv-${x.id}`} plain onPress={() => openConv($, c, x.id)}>
-            {x.id === here ? '▸ ' : '  '}{clip(x.topic, 40)}{' '}
-            <Text dimColor>{x.unread ? `${x.unread} unread ` : ''}{x.pending ? `${x.pending} for you ` : ''}{x.round ? '⟳' : ''}</Text>
-          </Button>
-        ))}
+      <Box flexDirection="column" gap={1}>
+        {note && <Text dimColor>{note}</Text>}
+        {snap.convs.length === 0 && <Text dimColor>No conversations yet. Join one with an invitation link.</Text>}
         {shown && (
-          <Box flexDirection="column" marginTop={1}>
-            <Text bold>{clip(shown.topic, 40)}</Text>
-            {shown.lines.length === 0 && <Text dimColor>No messages yet.</Text>}
+          <Box flexDirection="column">
+            <Text bold>{clip(shown.topic, 50)}</Text>
+            {shown.lines.length === 0 && <Text dimColor>Nobody has written yet. Say something below, or invite someone.</Text>}
             {shown.lines.slice(-room).map((l) => (
               <Text>
                 <Text bold={!l.isMine} dimColor={l.isMine}>{l.isMine ? 'you' : l.from}</Text>
                 {l.via === 'delegate' ? <Text dimColor> via agent</Text> : l.via === 'autonomous' ? <Text dimColor> agent</Text> : ''}
-                <Text dimColor>: </Text>{l.text}
+                <Text dimColor>  </Text>{l.text}
               </Text>
             ))}
-            <Input key={`say-${shown.conv}`} placeholder="Message (use @name to address someone)" submitLabel="Send" onSubmit={(text) => void sayHere($, c, shown.conv, text)} />
+          </Box>
+        )}
+        {shown && <Input key={`say-${shown.conv}`} placeholder="Write a message… (@name to address someone)" submitLabel="Send" onSubmit={(text) => void sayHere($, c, shown.conv, text)} />}
+        {others.length > 0 && (
+          <Box flexDirection="column">
+            <Text dimColor>Other conversations</Text>
+            {others.map((x) => (
+              <Button key={`conv-${x.id}`} plain onPress={() => openConv($, c, x.id)}>
+                {clip(x.topic, 40)}{' '}
+                <Text dimColor>{x.unread ? `${x.unread} unread ` : ''}{x.pending ? `${x.pending} for you ` : ''}{x.round ? '⟳' : ''}</Text>
+              </Button>
+            ))}
           </Box>
         )}
         {snap.drafts.length > 0 && <Text bold>Drafts waiting for you</Text>}
@@ -454,10 +469,11 @@ export const register: Register = (on, options) => {
               onSubmit={(brief) => void post($, c, `/rounds/${x.round}/join`, { brief }, 'Joined the round. Start your agent from the band.')} />
           </Box>
         ))}
-        <Box>
-          <Button key="refresh" plain label="Refresh" onPress={() => refresh($, c)} />
-          <Button key="web" plain label="Web app" onPress={() => c.open(c.base)} />
-          <Button key="signout" plain label="Sign out" onPress={async () => (signOut(), refresh($, c))} />
+        <Box gap={2}>
+          {shown && <Button key="invite" label="Invite" onPress={() => inviteLink($, c, shown.conv, e.surface)} />}
+          <Button key="refresh" label="Refresh" onPress={() => refresh($, c)} />
+          <Button key="web" label="Web app" onPress={() => c.open(c.base)} />
+          <Button key="signout" label="Sign out" onPress={async () => (signOut(), refresh($, c))} />
         </Box>
       </Box>
     )
