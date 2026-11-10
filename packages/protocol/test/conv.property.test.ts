@@ -297,6 +297,16 @@ describe('conversation decisions', () => {
     expect(done.notes[n]!.revs.map((x) => x.adoptedSeq !== null)).toEqual([false, true])
   })
 
+  it('the last person to leave archives the conversation; an earlier leaver does not', () => {
+    const one = exec(base, { t: 'leave', id: 'l1' as EventId, principal: p2 })
+    expect(one.events.map((e) => e.body.kind)).toEqual(['member_left'])
+    expect(one.state.archivedSeq).toBeNull()
+    const two = exec(one.state, { t: 'leave', id: 'l2' as EventId, principal: p1 })
+    expect(two.events.map((e) => e.body.kind)).toEqual(['conv_archived', 'member_left'])
+    expect(two.state.archivedSeq).not.toBeNull()
+    expect(activeMembers(two.state)).toEqual([])
+  })
+
   it('a round ends with the single note revision it produces', () => {
     const n = NOTES[1]!
     const out = exec(seated(), { t: 'note_revise', id: 'n' as EventId, principal: p1, path: { kind: 'autonomous', round: r, device: DEVICES[0]! }, note: n, base: null, title: 'T', text: 'minutes' })

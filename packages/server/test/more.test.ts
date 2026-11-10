@@ -29,6 +29,19 @@ describe('membership over time', () => {
     expect(contacts.filter((c) => c.handle === 'bob')).toHaveLength(1)
   })
 
+  it('when everyone has left, the conversation is closed for good and nobody can come back', async () => {
+    const { who: ann, conv } = await founder()
+    const bob = await invite(ann, conv, 'bob')
+    const link = (await ann.post(`/convs/${conv}/invites`, { link: true })).body.url as string
+    expect((await ann.post(`/convs/${conv}/leave`)).status).toBe(200)
+    expect((await bob.post(`/convs/${conv}/leave`)).status).toBe(200)
+    await eventually(async () => (await bob.convs()).length === 0, 'gone from the list')
+    // A link made while people were still inside no longer admits anyone.
+    const late = (await founder('zed')).who
+    expect((await late.post(`/join/${link.split('/j/')[1]}/accept`, {})).body.error).toBe('conv_archived')
+    expect((await ann.get(`/convs/${conv}`)).body.error).toBe('not_member')
+  })
+
   it('an archived conversation is read-only and is deleted whole after its retention', async () => {
     const { who: ann, conv } = await founder()
     const bob = await invite(ann, conv, 'bob')

@@ -433,7 +433,19 @@ export const decide = (s: ConvState, c: Command, env: DecideEnv): Decision => {
     case 'leave': {
       // Leaving is allowed even from an archived conversation.
       const m = s.created ? memberOf(s, c.principal) : undefined
-      return m ? accept([emit(c.id, { kind: 'member_left', alias: m.alias })]) : reject(err('not_member'))
+      if (!m) return reject(err('not_member'))
+      const left = emit(c.id, { kind: 'member_left', alias: m.alias })
+      // The last person out closes the door: with nobody inside, nobody could ever
+      // invite anyone back, so the conversation is archived and deleted after its
+      // retention like any other archived one.
+      const isLast = activeMembers(s).length === 1 && s.archivedSeq === null
+      return accept(isLast
+        ? [
+            ...openRounds(s).map((r) => emit(env.nextId(), { kind: 'round_closed', round: r.id, reason: 'closed' } as ConvBody)),
+            emit(env.nextId(), { kind: 'conv_archived', by: m.alias }),
+            left,
+          ]
+        : [left])
     }
     case 'archive': {
       const m = writer(s, c.principal)
