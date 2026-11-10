@@ -1,5 +1,7 @@
 {
   "name": "sudare",
+  "description": "Self-hosted messaging where people sit behind their agents, with a server-enforced human gate.",
+  "repository": "github:jinyuanlu/sudare",
   "private": true,
   "type": "module",
   "engines": {

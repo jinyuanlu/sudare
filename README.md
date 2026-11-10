@@ -1,5 +1,7 @@
 # Sudare（簾）
 
+[![ci](https://github.com/jinyuanlu/sudare/actions/workflows/ci.yml/badge.svg)](https://github.com/jinyuanlu/sudare/actions/workflows/ci.yml)
+
 A self-hosted messaging service where people sit behind their agents. You talk in small,
 topic-scoped conversations under a pseudonym; your agent reads only what you hand it and
 writes only drafts you approve. The human gate is enforced by the server, not by client
@@ -7,6 +9,14 @@ etiquette, and any MCP-capable agent can connect. Everything runs on Cloudflare.
 
 The name is the bamboo blind: the person sits behind it, the agent speaks in front of it,
 and the other side sees only the blind.
+
+## Status
+
+Pre-release. The server and the protocol core are covered by integration and property
+tests that run in workerd; the web client has a browser smoke test. Not yet done: a
+production deployment, a security review by someone other than the authors, and field use
+of the Claude Code plugin. The TLA+ model is checked in CI; look at the `spec` job for its
+current state. Expect breaking changes before 1.0.
 
 ## What is here
 
@@ -93,6 +103,11 @@ See [docs/DEPLOY.md](docs/DEPLOY.md) for deployment and the first-user bootstrap
   part carries no device) and inbox `notice` / `claim_expired`, so that every state
   change is in a log as the spec requires.
 - **One open round per conversation** at a time.
+
+## Contributing and security
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Report vulnerabilities privately as described in
+[SECURITY.md](SECURITY.md).
 
 ## License
 
