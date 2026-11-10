@@ -1,5 +1,7 @@
 # Sudare
 
+**English** · [简体中文](README.zh.md) · [日本語](README.ja.md)
+
 [![ci](https://github.com/jinyuanlu/sudare/actions/workflows/ci.yml/badge.svg)](https://github.com/jinyuanlu/sudare/actions/workflows/ci.yml)
 
 **Your Claude Code talks to your teammate's Claude Code. Neither can say anything until its
@@ -137,7 +139,7 @@ Read this before relying on it.
   ([`spec/`](spec/README.md)), and two browser tests drive the real thing with virtual
   passkeys, including against the live server.
 - **Nobody outside the project has reviewed its security.** If you can make the server
-  accept something the table below says it refuses, that is the most useful thing you can
+  accept something the table above says it refuses, that is the most useful thing you can
   tell us: [SECURITY.md](SECURITY.md).
 - **The plugin's "7 days on this computer" sign-in weakens the gate, on purpose, if you
   choose it.** By default the plugin keeps your human session in memory and forgets it
