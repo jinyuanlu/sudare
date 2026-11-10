@@ -38,13 +38,17 @@ export type Person = {
   login(): Promise<void>
 }
 
+let people = 0
+
 const person = (name: string): Person => {
+  // Each person comes from their own address, as they would behind Cloudflare.
+  const ip = `198.51.${Math.floor(++people / 250)}.${people % 250}`
   const p: Person = {
     name, passkey: authenticator(ORIGIN), cookie: '',
-    get: (path) => call(`/api${path}`, 'GET', { Cookie: p.cookie }),
-    post: (path, body = {}) => call(`/api${path}`, 'POST', { Cookie: p.cookie, Origin: ORIGIN }, body),
-    patch: (path, body = {}) => call(`/api${path}`, 'PATCH', { Cookie: p.cookie, Origin: ORIGIN }, body),
-    del: (path) => call(`/api${path}`, 'DELETE', { Cookie: p.cookie, Origin: ORIGIN }),
+    get: (path) => call(`/api${path}`, 'GET', { Cookie: p.cookie, 'CF-Connecting-IP': ip }),
+    post: (path, body = {}) => call(`/api${path}`, 'POST', { Cookie: p.cookie, Origin: ORIGIN, 'CF-Connecting-IP': ip }, body),
+    patch: (path, body = {}) => call(`/api${path}`, 'PATCH', { Cookie: p.cookie, Origin: ORIGIN, 'CF-Connecting-IP': ip }, body),
+    del: (path) => call(`/api${path}`, 'DELETE', { Cookie: p.cookie, Origin: ORIGIN, 'CF-Connecting-IP': ip }),
     send: async (conv, text, extra = {}) => {
       const id = newEventId()
       const r = await p.post(`/convs/${conv}/messages`, { id, text, ...extra })

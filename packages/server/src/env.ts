@@ -9,6 +9,8 @@ export type Env = {
   OAUTH_KV: KVNamespace
   ASSETS: Fetcher
   OAUTH_PROVIDER: OAuthHelpers
+  RL_PUBLIC?: RateLimit
+  RL_WRITE?: RateLimit
   PUBLIC_ORIGIN: string
   ALLOWED_REDIRECT_ORIGINS: string
   ROUND_CLIENT_IDS: string

@@ -540,6 +540,14 @@ describe('devices and OAuth', () => {
     expect(await db.prepare(`SELECT count(*) AS n FROM sessions WHERE kind = 'plugin'`).first('n')).toBe(0)
   })
 
+  it('throttles unauthenticated callers per address', async () => {
+    const from = (ip: string) => raw('/api/join/aaaaaaaaaaaaaaaaaaaaaaaa/check', { headers: { 'CF-Connecting-IP': ip } }).then((r) => r.status)
+    const burst = await Promise.all(Array.from({ length: 40 }, () => from('203.0.113.9')))
+    expect(burst.filter((s) => s === 429).length).toBeGreaterThan(0)
+    expect(burst.filter((s) => s === 200).length).toBeGreaterThan(0)
+    expect(await from('203.0.113.10')).toBe(200)
+  })
+
   it('logs in again with the same passkey and rejects a replayed assertion', async () => {
     const { who: ann } = await founder()
     const o = await ann.post('/auth/login/options')

@@ -71,11 +71,18 @@ api.use('*', async (c, next) => {
  */
 const sameOrigin = (c: C): boolean => c.req.header('Origin') === origin(c.env)
 
+/** A brake on abuse. The binding is optional so local setups without it still run. */
+const throttle = async (limiter: RateLimit | undefined, key: string): Promise<void> => {
+  if (limiter && !(await limiter.limit({ key })).success) fail('rate_limited')
+}
+const caller = (c: C): string => c.req.header('CF-Connecting-IP') ?? 'local'
+
 const human = (kinds: Session['kind'][] = ['web', 'plugin']) => async (c: C, next: () => Promise<void>) => {
   const session = await readSession(c.env, c.req.raw)
   if (!session) return fail('unauthenticated')
   if (!kinds.includes(session.kind)) return fail('forbidden_scope')
   if (session.via === 'cookie' && c.req.method !== 'GET' && !sameOrigin(c)) return fail('forbidden_scope', 'origin')
+  if (c.req.method !== 'GET') await throttle(c.env.RL_WRITE, session.principal)
   c.set('session', session)
   await next()
 }
@@ -86,8 +93,14 @@ const anyHuman = human()
 
 // -- sign-in ----------------------------------------------------------------------
 
+const publicRead = async (c: C, next: () => Promise<void>) => {
+  await throttle(c.env.RL_PUBLIC, caller(c))
+  await next()
+}
+
 const publicWrite = async (c: C, next: () => Promise<void>) => {
   if (!sameOrigin(c)) return fail('forbidden_scope', 'origin')
+  await throttle(c.env.RL_PUBLIC, caller(c))
   await next()
 }
 
@@ -97,7 +110,7 @@ const startSession = async (c: C, proof: Parameters<typeof issueSession>[1]) => 
   return c.json({ principal: proof.principal, expires: s.expires })
 }
 
-api.get('/join/:code/check', async (c) => {
+api.get('/join/:code/check', publicRead, async (c) => {
   const i = await inviteByCode(c.env, c.req.param('code') ?? '')
   return c.json({ valid: !!i && i.used_at === null && inviteOpenTo(i, i.bound), registered: !!i?.bound })
 })
@@ -167,6 +180,7 @@ const linkRow = async (c: C, id: string): Promise<LinkRow> => {
 }
 
 api.get('/link/:id/status', async (c) => {
+  await throttle(c.env.RL_WRITE, `link:${c.req.param('id')}`)
   const row = await linkRow(c, c.req.param('id') ?? '')
   return c.json({ confirmed: row.confirmed_at !== null, expires: row.expires_at })
 })

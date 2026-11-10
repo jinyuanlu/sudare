@@ -258,6 +258,8 @@ const build = (a: Agent): McpServer => {
     tool('human_session_start', 'Used by the Sudare plugin itself, not by the model: starts the browser confirmation that gives the plugin (never the agent) a short-lived human session. Requires a passkey confirmation by your human.',
       { challenge: z.string().regex(/^[A-Za-z0-9_-]{43}$/) },
       async ({ challenge }) => {
+        const open = await a.env.DB.prepare(`SELECT count(*) AS n FROM human_links WHERE device = ? AND expires_at > ?`).bind(a.device.id, Date.now()).first<number>('n')
+        if ((open ?? 0) >= 5) return err('rate_limited')
         const link = b64url(crypto.getRandomValues(new Uint8Array(24)))
         const expires = Date.now() + 5 * 60_000
         await a.env.DB.prepare(`INSERT INTO human_links (id, principal, device, challenge, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)`)

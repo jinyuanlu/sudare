@@ -1,0 +1,4 @@
+# Copy to .dev.vars for `pnpm dev`. Never commit the copy.
+ADMIN_SECRET=change-me-to-at-least-24-random-characters
+# Optional, for Web Push (pnpm gen:vapid):
+# VAPID_PRIVATE_KEY=
