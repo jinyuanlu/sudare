@@ -17,6 +17,20 @@ const EMPTY: SudareSnapshot = { convs: [], inbox: [], drafts: [], invites: [], s
 const snapshot = atom({ plugin: 'sudare', key: 'snapshot' } as const, EMPTY)
 const current = atom({ plugin: 'sudare', key: 'current' } as const, null)
 const timeline = atom({ plugin: 'sudare', key: 'timeline' } as const, null)
+/** The "new conversation" form in the panel: open or not, and who is ticked. */
+const compose = atom({ plugin: 'sudare', key: 'compose' } as const, { isOpen: false, people: [] })
+/** Whether the person chose to stay signed in on this machine. */
+const kept = atom({ plugin: 'sudare', key: 'isKept' } as const, false)
+/** The short explanation at the top of the panel, shown until the person says they have it. */
+const helpOpen = atom({ plugin: 'sudare', key: 'isHelpOpen' } as const, false)
+
+const HELP = [
+  'Read and write here. Messages from others also show above your prompt.',
+  'To: pick everyone or one person. ● means they are here now.',
+  'Ask Claude (above the prompt) lets your agent draft a reply. Nothing is sent until you press Send.',
+  'Invite adds a person. New conversation starts another topic with people from this one.',
+]
+
 /** Who the next message in the panel is addressed to; null means everyone in the conversation. */
 const target = atom({ plugin: 'sudare', key: 'target' } as const, null)
 const link = atom({ plugin: 'sudare', key: 'link' } as const, null)
@@ -187,6 +201,29 @@ async function sayHere($: Engine, c: Client, conv: string, text: string, picked:
 const transcript = (t: SudareTimeline): string =>
   `you (${t.me})${t.others.length ? ` with ${t.others.map((o) => `@${o.handle}${o.isHere ? ' (here now)' : ''}`).join(', ')}` : ', nobody else here yet'}\n` + (t.lines.length === 0 ? '(no messages yet)' : t.lines.map((l) => `${l.isMine ? 'you' : `@${l.from}`}${l.via === 'delegate' ? ' (via agent)' : l.via === 'autonomous' ? ' (agent, round)' : ''}: ${l.text}`).join('\n'))
 
+/** A new conversation with people from the open one. They join directly: the audience does not grow. */
+async function createFrom($: Engine, c: Client, from: SudareTimeline, people: string[], topic: string): Promise<void> {
+  const title = topic.trim()
+  if (title === '') return
+  const members = from.others.filter((o) => people.includes(o.handle)).map((o) => ({ conv: from.conv, alias: o.alias }))
+  const r = await c.api('POST', '/convs', { topic: title, parent: from.conv, members })
+  const made = str((r.body as Json).conv)
+  if (!r.ok || made === '') return void (await say($, `Not created: ${str((r.body as Json).error) || r.status}`))
+  await update($, compose, () => ({ isOpen: false, people: [] }))
+  $.ui.toast(`Created "${title}"`)
+  await openConv($, c, made)
+}
+
+async function setKeep($: Engine, c: Client, on: boolean): Promise<void> {
+  await c.setPreference(on)
+  await update($, kept, () => on)
+}
+
+async function closeHelp($: Engine): Promise<void> {
+  await update($, helpOpen, () => false)
+  await $.store.set('helpSeen', true).catch(() => undefined)
+}
+
 /** The private chat with one person from this conversation: opened if it exists, created if not. */
 async function openPrivate($: Engine, c: Client, conv: string, person: SudarePerson): Promise<void> {
   const r = await c.api('POST', '/convs', { topic: `@${person.handle}`, members: [{ conv, alias: person.alias }], dm: true })
@@ -251,14 +288,17 @@ export const register: Register = (on, options) => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'sudare',
-      description: 'Sudare: list conversations, switch, send, invite, sign in',
-      argumentHint: '[topic prefix | new <topic> @a @b | invite @a | join <link> | signin | signout | panel | web]',
+      description: 'Open Sudare: your conversations and messages',
+      argumentHint: '(opens Sudare)',
     })
     if (server !== '') {
       const c = makeClient($, server, keep)
       poll?.cancel()
       poll = $.clock.every(10_000, () => tick($, c).catch(() => undefined))
+      const isKeeping = await c.loadPreference().catch(() => false)
+      await update($, kept, () => isKeeping)
       await c.restore().catch(() => undefined)
+      if ((await $.store.get('helpSeen').catch(() => true)) !== true) await update($, helpOpen, () => true)
       await refresh($, c)
     }
     return next(e)
@@ -317,7 +357,20 @@ export const register: Register = (on, options) => {
     }
     const here = await read($, current)
     const lines = snap.convs.map((x) => `${x.id === here ? '▸' : ' '} ${x.topic}${x.unread ? `  (${x.unread} unread)` : ''}${x.pending ? `  [${x.pending} for you]` : ''}${x.round ? '  ⟳ round' : ''}`)
-    return { text: lines.length ? lines.join('\n') : 'No conversations yet. Join one with an invitation link.' }
+    void $.ui.open({ id: PANE, title: 'Sudare' })
+    return {
+      text: [
+        'Your conversations:',
+        ...(lines.length ? lines : ['  none yet: open an invitation link someone sent you']),
+        '',
+        'The Sudare panel is open: read, write, invite and start conversations there.',
+        'Shortcuts, if you prefer typing:',
+        '  @name your message      send to someone in the open conversation',
+        '  /sudare <topic>         switch conversation and show its messages',
+        '  /sudare new <topic> @name   start a conversation',
+        '  /sudare signout         forget the sign-in on this machine',
+      ].join('\n'),
+    }
   })
 
   // "@handle text" + Enter sends directly, with the in-memory human session.
@@ -348,6 +401,7 @@ export const register: Register = (on, options) => {
     const { Box, Button, Text } = $.ui.resolve(e)
     const c = makeClient($, server, keep)
     const [snap, pending, here, isIn, note, shown] = [await read($, snapshot), await read($, link), await read($, current), await read($, signedIn), await read($, notice), await read($, timeline)]
+    const isKept = await read($, kept)
 
     if (pending) {
       return (
@@ -362,7 +416,9 @@ export const register: Register = (on, options) => {
         <Box>
           <Text dimColor>簾 Sudare </Text>
           <Button key="signin" label="Sign in" onPress={async () => void (await say($, await signIn($, c, allowHuman)))} />
-          {note && <Text dimColor> {note}</Text>}
+          {allowHuman && <Text>  </Text>}
+          {allowHuman && <Button key="keep" plain label={`${isKept ? '☑' : '☐'} stay signed in for 7 days`} onPress={() => setKeep($, c, !isKept)} />}
+          {note && <Text dimColor>  {note}</Text>}
         </Box>
       )
     }
@@ -432,6 +488,7 @@ export const register: Register = (on, options) => {
     const [snap, here, isIn, shown, note] = [await read($, snapshot), await read($, current), await read($, signedIn), await read($, timeline), await read($, notice)]
     const room = Math.max(8, (e.viewport?.rows ?? 30) - snap.convs.length - 12)
     const to = await read($, target)
+    const [form, isHelp] = [await read($, compose), await read($, helpOpen)]
     const picked = shown?.others.find((o) => o.handle === to) ?? null
     if (!isIn) {
       return (
@@ -446,6 +503,12 @@ export const register: Register = (on, options) => {
     const others = snap.convs.filter((x) => x.id !== here)
     return (
       <Box flexDirection="column" gap={1}>
+        {isHelp && (
+          <Box flexDirection="column">
+            {HELP.map((line) => <Text dimColor>· {line}</Text>)}
+            <Button key="help-close" plain label="Got it" onPress={() => closeHelp($)} />
+          </Box>
+        )}
         {note && <Text dimColor>{note}</Text>}
         {snap.convs.length === 0 && <Text dimColor>No conversations yet. Join one with an invitation link.</Text>}
         {shown && (
@@ -507,11 +570,29 @@ export const register: Register = (on, options) => {
               onSubmit={(brief) => void post($, c, `/rounds/${x.round}/join`, { brief }, 'Joined the round. Start your agent from the band.')} />
           </Box>
         ))}
-        <Box gap={2}>
+        {shown && form.isOpen && (
+          <Box flexDirection="column">
+            <Text bold>New conversation</Text>
+            {shown.others.length > 0 && (
+              <Box gap={2} flexWrap="wrap">
+                <Text dimColor>With</Text>
+                {shown.others.map((o) => (
+                  <Button key={`with-${o.handle}`} plain label={`${form.people.includes(o.handle) ? '☑' : '☐'} ${o.handle}`}
+                    onPress={() => update($, compose, (f) => ({ ...f, people: f.people.includes(o.handle) ? f.people.filter((h) => h !== o.handle) : [...f.people, o.handle] }))} />
+                ))}
+              </Box>
+            )}
+            <Input key="new-topic" placeholder="What is it about?" submitLabel="Create" onSubmit={(topic) => void createFrom($, c, shown, form.people, topic)} />
+            <Button key="new-cancel" plain label="cancel" onPress={() => update($, compose, () => ({ isOpen: false, people: [] }))} />
+          </Box>
+        )}
+        <Box gap={2} flexWrap="wrap">
           {shown && <Button key="invite" label="Invite" onPress={() => inviteLink($, c, shown.conv, e.surface)} />}
-          <Button key="refresh" label="Refresh" onPress={() => refresh($, c)} />
+          {shown && !form.isOpen && <Button key="new" label="New conversation" onPress={() => update($, compose, () => ({ isOpen: true, people: shown.others.map((o) => o.handle) }))} />}
           <Button key="web" label="Web app" onPress={() => c.open(c.base)} />
-          <Button key="signout" label="Sign out" onPress={async () => (await c.signOut(), refresh($, c))} />
+          <Button key="help" plain label="help" onPress={() => update($, helpOpen, (v) => !v)} />
+          <Button key="refresh" plain label="refresh" onPress={() => refresh($, c)} />
+          <Button key="signout" plain label="sign out" onPress={async () => (await c.signOut(), refresh($, c))} />
         </Box>
       </Box>
     )

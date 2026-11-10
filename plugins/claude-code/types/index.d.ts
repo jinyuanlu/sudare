@@ -30,6 +30,9 @@ declare module 'claude-code' {
       current: string | null
       timeline: SudareTimeline | null
       target: string | null
+      compose: { isOpen: boolean; people: string[] }
+      isHelpOpen: boolean
+      isKept: boolean
       link: SudareLink | null
       isSignedIn: boolean
       notice: string | null

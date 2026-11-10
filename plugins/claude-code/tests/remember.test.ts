@@ -6,12 +6,13 @@ const BAND = {
 } as const
 const KEPT = { secret: 'sds_kept', expires: 4_000_000_000_000, server: 'https://sudare.test' }
 
-const engine = (on: Parameters<NonNullable<Parameters<typeof test>[2]>>[1], seen: { deleted: number; bearer: string[] }) => {
+const engine = (on: Parameters<NonNullable<Parameters<typeof test>[2]>>[1], seen: { deleted: number; bearer: string[]; keep: boolean }) => {
   on('command.register', () => ({ value: { command: 'sudare' } }))
   on('clock.every', () => ({ value: undefined }))
   on('clock.now', () => ({ value: 1_000 }))
   on('ui.status', () => ({ value: undefined }))
-  on('store.get', () => ({ value: KEPT }))
+  on('store.get', (_, e) => ({ value: (e as { key?: string }).key === 'human' ? KEPT : (e as { key?: string }).key === 'keep' ? seen.keep : undefined }))
+  on('store.set', () => ({ value: undefined }))
   on('store.delete', () => {
     seen.deleted += 1
     return { value: undefined }
@@ -24,7 +25,7 @@ const engine = (on: Parameters<NonNullable<Parameters<typeof test>[2]>>[1], seen
 }
 
 test('remember off (the default): a kept sign-in is deleted, never used', { options: { server: 'https://sudare.test', humanSession: 'on', rememberSignIn: 'off' } }, async ($, on) => {
-  const seen = { deleted: 0, bearer: [] as string[] }
+  const seen = { deleted: 0, bearer: [] as string[], keep: false }
   engine(on, seen)
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   expect(seen.deleted).toBeGreaterThan(0)
@@ -35,11 +36,18 @@ test('remember off (the default): a kept sign-in is deleted, never used', { opti
 })
 
 test('remember on: the kept sign-in is picked up at start, for this server only', { options: { server: 'https://sudare.test', humanSession: 'on', rememberSignIn: 'on' } }, async ($, on) => {
-  const seen = { deleted: 0, bearer: [] as string[] }
+  const seen = { deleted: 0, bearer: [] as string[], keep: false }
   engine(on, seen)
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   expect(seen.bearer.some((b) => b.includes('Bearer sds_kept'))).toBe(true)
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
   expect(await ui.find({ key: 'signin' })).toBeUndefined()
   await ui.unmount()
+})
+
+test('ticking "stay signed in" next to the button has the same effect, without the setting', { options: { server: 'https://sudare.test', humanSession: 'on', rememberSignIn: 'off' } }, async ($, on) => {
+  const seen = { deleted: 0, bearer: [] as string[], keep: true }
+  engine(on, seen)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  expect(seen.bearer.some((b) => b.includes('Bearer sds_kept'))).toBe(true)
 })

@@ -22,7 +22,26 @@ let human: { secret: string; expires: number } | null = null
 export const isSignedIn = (): boolean => human !== null
 const STORED = 'human'
 
-export function makeClient($: Engine, server: string, remember = false) {
+// "Keep me signed in": the person's own choice, made next to the Sign in button
+// and kept in $.store. Loaded once per run by loadPreference().
+let keepPref = false
+export const keepsSignIn = (): boolean => keepPref
+
+export function makeClient($: Engine, server: string, always = false) {
+  const remember = always || keepPref
+
+  const loadPreference = async (): Promise<boolean> => {
+    keepPref = (await $.store.get('keep').catch(() => false)) === true
+    return always || keepPref
+  }
+
+  /** Turning it off also forgets whatever was kept. */
+  const setPreference = async (on: boolean): Promise<void> => {
+    keepPref = on
+    await $.store.set('keep', on).catch(() => undefined)
+    if (!on && !always) await $.store.delete(STORED).catch(() => undefined)
+  }
+
   const base = server.replace(/\/+$/, '')
 
   /** Forget the sign-in everywhere on this machine. */
@@ -33,7 +52,7 @@ export function makeClient($: Engine, server: string, remember = false) {
 
   /** With "remember" on, pick up the sign-in a previous run kept; otherwise make sure none is kept. */
   const restore = async (): Promise<void> => {
-    if (!remember) return void (await $.store.delete(STORED).catch(() => undefined))
+    if (!(always || keepPref)) return void (await $.store.delete(STORED).catch(() => undefined))
     if (human) return
     const kept = (await $.store.get(STORED).catch(() => undefined)) as { secret?: unknown; expires?: unknown; server?: unknown } | undefined
     const usable = kept && typeof kept.secret === 'string' && typeof kept.expires === 'number' && kept.server === base && kept.expires > (await $.clock.now())
@@ -141,7 +160,7 @@ const parse = (text: string): Json | Json[] => {
     return false
   }
 
-  return { base, api, tool, beginSignIn, finishSignIn, open, signOut, restore }
+  return { base, api, tool, beginSignIn, finishSignIn, open, signOut, restore, loadPreference, setPreference }
 }
 
 export type Client = ReturnType<typeof makeClient>
