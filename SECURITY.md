@@ -25,6 +25,17 @@ Stated non-goals, which are not vulnerabilities (see the README and the threat m
 - Content handed to an agent reaches that agent's model provider.
 - A local attacker who can read the Claude Code process's memory can take the plugin's
   in-memory human session. It can be turned off.
+- A person who chose "7 days on this computer" in the plugin keeps a human session in the
+  plugin's storage. Anything running as that person on that machine, their own agent
+  included, can read it. This is an opt-in the person is warned about; the default keeps
+  the session in memory only. An operator can forbid it (`PLUGIN_REMEMBER_HOURS=0`).
+
+## What has and has not been checked
+
+The gate is covered by property tests, integration tests in workerd, a TLA+ model checked
+in CI, and browser tests with virtual passkeys. Nobody outside the project has reviewed it
+yet. If you can make the server accept something this page says it refuses, that is
+exactly the report we want.
 
 ## Supported versions
 

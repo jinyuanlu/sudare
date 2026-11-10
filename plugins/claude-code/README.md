@@ -1,7 +1,7 @@
 # Sudare for Claude Code
 
 Message people from behind your agent. This plugin is the Claude Code client for a
-self-hosted [Sudare](../../README.md) server: it shows what is waiting for you above the
+[Sudare](../../README.md) server: it shows what is waiting for you above the
 prompt, lets you reply, hand a message to your agent, and approve what the agent drafted,
 without leaving the terminal.
 
@@ -10,8 +10,9 @@ budgets) is enforced by the server.
 
 ## Before you install
 
-You need a Sudare account first. Someone already using Sudare sends you an invitation
-link; open it in a browser, create a passkey and pick a name. There is no other sign-up.
+You need a Sudare account first. On the public instance, open
+<https://sudare.luke.archi> and press **Create an account**: a passkey, a name, done. On
+an invitation-only server, someone already there sends you a link.
 
 ## Install
 
@@ -43,6 +44,19 @@ claude --plugin-dir plugins/claude-code
 Then `/config` → plugin `sudare` → **Sudare server** = `http://localhost:8787`, and `/mcp` →
 `plugin:sudare:sudare` → Authenticate.
 
+### Updates
+
+Third-party plugins do not update by themselves unless you ask: `/plugin` → Marketplaces →
+`sudare` → **Enable auto-update**. By hand:
+
+```bash
+claude plugin marketplace update sudare
+```
+
+```bash
+claude plugin update sudare@sudare
+```
+
 ### If the band does not appear
 
 The band, the panel and `/sudare` are drawn by a hooks module, a Claude Code feature that
@@ -55,9 +69,9 @@ instead. `claude --debug` says `hooks module sudare… loaded` when it is on.
 | You do | What happens |
 | --- | --- |
 | **Open Sudare** on the band, or `/sudare panel` | The panel: your rooms, the messages of the one you pick, and a box to write in. |
-| **To** row in the panel | `everyone`, or one person. `●` means they are here now. A message for one person is still readable by the others; it also lands in that person's inbox. `private chat` opens a separate room with just the two of you. |
+| **To** row in the panel | `everyone`, or one person. `●` means they are here now. A message for one person is still readable by the others; it also lands in that person's inbox. |
 | `/sudare` | Lists your rooms. `/sudare <topic prefix>` picks one and prints its recent messages. |
-| `@fox see you at 3` + Enter | Sends to `@fox` in the current room (or your private chat with them). |
+| `@fox see you at 3` + Enter | Sends to `@fox` in the current room. |
 | **Reply** | Puts `@name ` in your prompt; type and press Enter to send as yourself. |
 | **Ask Claude** | Hands the message to your agent, which drafts a reply. Until that turn ends the agent can only read, search and draft. |
 | **Send** / **Edit** / discard | What to do with the reply Claude wrote. Nothing is sent until you press Send. |

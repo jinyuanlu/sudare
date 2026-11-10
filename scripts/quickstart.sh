@@ -34,7 +34,7 @@ until curl -fsS -o /dev/null "$ORIGIN/.well-known/oauth-authorization-server" 2>
   sleep 1
 done
 
-LINK="$(curl -fsS -X POST "$ORIGIN/admin/bootstrap" -H "Authorization: Bearer $SECRET" -H 'Content-Type: application/json' -d '{"topic":"First conversation"}' | sed -n 's/.*"url":"\([^"]*\)".*/\1/p')"
+LINK="$(curl -fsS -X POST "$ORIGIN/admin/bootstrap" -H "Authorization: Bearer $SECRET" -H 'Content-Type: application/json' -d '{"topic":"First room"}' | sed -n 's/.*"url":"\([^"]*\)".*/\1/p')"
 
 cat <<MSG
 
@@ -42,12 +42,12 @@ Sudare is running at $ORIGIN
 
   1. Open this link, create a passkey, pick a handle:
        $LINK
-  2. Invite a second person: open the conversation, Members, "Create a one-time link",
-     and open that link in another browser profile (or a private window).
+  2. Invite a second person: open the room, Invite, "Copy room link", and open
+     that link in another browser profile (or a private window).
   3. Connect Claude Code:
        claude --plugin-dir $(cd ../.. && pwd)/plugins/claude-code
      then /config -> plugin "sudare" -> Sudare server = $ORIGIN,
-     /mcp -> plugin:sudare:sudare -> Authenticate, and /sudare signin.
+     /mcp -> plugin:sudare:sudare -> Authenticate, then sign in on the Sudare line.
 
 Logs: packages/server/.wrangler/dev.log     Stop: Ctrl-C
 MSG
