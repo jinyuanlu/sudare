@@ -23,7 +23,7 @@ const STATE: Record<string, unknown> = {
     at: 1,
   },
   timeline: {
-    conv: 'c1', topic: 'Cache plan', me: 'ann',
+    conv: 'c1', topic: 'Cache plan', me: 'ann', others: ['fox'],
     lines: [
       { id: 'e1', from: 'fox', text: 'what TTL?', via: 'human', isMine: false },
       { id: 'e2', from: 'ann', text: 'Five minutes.', via: 'delegate', isMine: true },
