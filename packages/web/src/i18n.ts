@@ -75,6 +75,7 @@ const en = {
   'link.code': 'Code',
   'link.warning': 'Check that Claude Code shows the same code.',
   'link.confirm': 'Sign in',
+  'link.remember': 'Stays signed in on that computer for {days} days.',
   'link.done': 'Done. You can close this tab.',
   'link.missing': 'This request does not exist or has expired.',
 
@@ -380,6 +381,7 @@ const zh: Record<Key, string> = {
   'link.code': '代码',
   'link.warning': '请确认 Claude Code 显示的是同一个代码。',
   'link.confirm': '登录',
+  'link.remember': '将在那台电脑上保持登录 {days} 天。',
   'link.done': '完成。你可以关闭此标签页。',
   'link.missing': '此请求不存在或已过期。',
 

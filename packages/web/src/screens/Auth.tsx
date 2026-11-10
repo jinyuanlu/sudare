@@ -131,6 +131,7 @@ export const LinkScreen = ({ id }: { id: string }) => {
         <p>{t('link.device', { device: info.data.device })}</p>
         <p class="code" aria-label={t('link.code')}>{info.data.code}</p>
         <p class="warn">{t('link.warning')}</p>
+        {info.data.remember_hours > 0 && <p>{t('link.remember', { days: Math.round(info.data.remember_hours / 24) })}</p>}
         <p class="muted small">{t('common.expires', { when: fmtDate(info.data.expires) })}</p>
         <button type="button" class="primary big" disabled={act.busy} onClick={confirm}>
           {t('link.confirm')}

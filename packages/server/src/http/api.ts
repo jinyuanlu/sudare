@@ -13,7 +13,7 @@ import { TOKEN_PREFIX, revokeGrants } from '../auth/oauth'
 import { addOptions, addVerify, assertOptions, assertVerify, registerOptions, registerVerify } from '../auth/passkey'
 import { adoptSession, clearCookie, endDeviceSessions, endSession, issueSession, readSession, sessionCookie, type Session } from '../auth/session'
 import { deviceView, directory } from '../directory'
-import { origin, type Env } from '../env'
+import { origin, rememberHours, type Env } from '../env'
 import { pushConfigured } from '../push'
 import { acceptInvite, bootstrap, createConv, declineInvite, inviteByCode, inviteCard, inviteLink, inviteMember, inviteOpenTo } from '../services/convs'
 import { approveDraft } from '../services/drafts'
@@ -173,7 +173,7 @@ api.post('/passkeys/verify', web, async (c) => {
 // hash into a session. The secret itself never leaves the plugin's memory
 // until it is used as a bearer token.
 
-type LinkRow = { id: string; principal: PrincipalId; device: DeviceId; challenge: string; expires_at: number; confirmed_at: number | null }
+type LinkRow = { id: string; principal: PrincipalId; device: DeviceId; challenge: string; expires_at: number; confirmed_at: number | null; remember: number }
 const linkRow = async (c: C, id: string): Promise<LinkRow> => {
   const row = await c.env.DB.prepare(`SELECT * FROM human_links WHERE id = ? AND expires_at > ?`).bind(id, Date.now()).first<LinkRow>()
   return row ?? fail('not_found')
@@ -191,7 +191,7 @@ api.get('/link/:id', web, async (c) => {
   // A link started by someone else's device is indistinguishable from one that does not exist.
   if (row.principal !== me(c)) return fail('not_found')
   const device = await directory(c.env).device(row.device)
-  return c.json({ device: device?.name ?? 'unknown', code: row.challenge.slice(0, 6).toUpperCase(), confirmed: row.confirmed_at !== null, expires: row.expires_at })
+  return c.json({ device: device?.name ?? 'unknown', code: row.challenge.slice(0, 6).toUpperCase(), confirmed: row.confirmed_at !== null, expires: row.expires_at, remember_hours: row.remember === 1 ? rememberHours(c.env) : 0 })
 })
 
 api.post('/link/:id/options', web, async (c) => {
@@ -208,7 +208,9 @@ api.post('/link/:id/confirm', web, async (c) => {
   if (r.value.subject !== row.id || r.value.proof.principal !== row.principal || row.principal !== me(c)) return fail('unauthenticated')
   const claimed = await c.env.DB.prepare(`UPDATE human_links SET confirmed_at = ? WHERE id = ? AND confirmed_at IS NULL`).bind(Date.now(), row.id).run()
   if ((claimed.meta.changes ?? 0) !== 1) return fail('not_found')
-  const s = await adoptSession(c.env, r.value.proof, row.challenge, 'plugin', row.device)
+  // A remembered session is one the person agreed, on this page, to keep on that machine.
+  const keep = row.remember === 1 ? rememberHours(c.env) : 0
+  const s = await adoptSession(c.env, r.value.proof, row.challenge, 'plugin', row.device, keep > 0 ? keep : undefined)
   return c.json({ expires: s.expires })
 })
 

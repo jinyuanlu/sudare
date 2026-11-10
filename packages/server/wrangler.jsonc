@@ -41,6 +41,8 @@
     "PLUGIN_HUMAN_SESSION": "on",
     "WEB_SESSION_HOURS": "168",
     "PLUGIN_SESSION_HOURS": "8",
+    // Lifetime of a plugin session the person chose to keep across restarts; "0" forbids it.
+    "PLUGIN_REMEMBER_HOURS": "168",
     "VAPID_SUBJECT": "",
     "VAPID_PUBLIC_KEY": ""
   }

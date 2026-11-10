@@ -17,6 +17,7 @@ export type Env = {
   PLUGIN_HUMAN_SESSION: string
   WEB_SESSION_HOURS: string
   PLUGIN_SESSION_HOURS: string
+  PLUGIN_REMEMBER_HOURS?: string
   VAPID_SUBJECT: string
   VAPID_PUBLIC_KEY: string
   VAPID_PRIVATE_KEY?: string
@@ -26,6 +27,12 @@ export type Env = {
 export const origin = (env: Env): string => env.PUBLIC_ORIGIN.replace(/\/+$/, '')
 export const csv = (value: string | undefined): string[] =>
   (value ?? '').split(',').map((s) => s.trim()).filter(Boolean)
+/** How long a remembered plugin session lasts; 0 means the operator does not allow remembering. */
+export const rememberHours = (env: Env): number => {
+  const n = Number(env.PLUGIN_REMEMBER_HOURS ?? 168)
+  return Number.isFinite(n) && n > 0 ? n : 0
+}
+
 export const hours = (value: string | undefined, fallback: number): number => {
   const n = Number(value)
   return Number.isFinite(n) && n > 0 ? n : fallback

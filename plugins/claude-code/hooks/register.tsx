@@ -7,7 +7,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { SudareConv, SudareDraft, SudareInvite, SudareItem, SudareLine, SudareLink, SudareSeat, SudareSnapshot, SudareTimeline } from '../types'
-import { isSignedIn, makeClient, signOut, type Client, type Json } from './client'
+import { isSignedIn, makeClient, type Client, type Json } from './client'
 import { enterReadonly, isOwnCall, isPluginOnlyTool, leaveReadonly, refusal } from './guard'
 
 type Engine = EngineInterface
@@ -224,6 +224,7 @@ async function send($: Engine, c: Client, handle: string, text: string): Promise
 export const register: Register = (on, options) => {
   const server = String(options.server ?? '').trim()
   const allowHuman = String(options.humanSession ?? 'on') !== 'off'
+  const keep = allowHuman && String(options.rememberSignIn ?? 'off') === 'on'
   let poll: { cancel: () => unknown } | null = null
 
   // -- lifecycle ----------------------------------------------------------------
@@ -235,9 +236,10 @@ export const register: Register = (on, options) => {
       argumentHint: '[topic prefix | new <topic> @a @b | invite @a | join <link> | signin | signout | panel | web]',
     })
     if (server !== '') {
-      const c = makeClient($, server)
+      const c = makeClient($, server, keep)
       poll?.cancel()
       poll = $.clock.every(10_000, () => tick($, c).catch(() => undefined))
+      await c.restore().catch(() => undefined)
       await refresh($, c)
     }
     return next(e)
@@ -245,14 +247,14 @@ export const register: Register = (on, options) => {
 
   on('command.run', { command: 'sudare' }, async ($, e) => {
     if (server === '') return { text: 'Set the Sudare server URL first: /config, plugin "sudare", "Sudare server".' }
-    const c = makeClient($, server)
+    const c = makeClient($, server, keep)
     const [verb = '', ...rest] = e.args.trim().split(/\s+/)
     const handles = rest.filter((w) => w.startsWith('@'))
     const words = rest.filter((w) => !w.startsWith('@')).join(' ')
 
     if (verb === 'signin') return { text: await signIn($, c, allowHuman) }
     if (verb === 'signout') {
-      signOut()
+      await c.signOut()
       await refresh($, c)
       return { text: 'Signed out of the in-plugin human session.' }
     }
@@ -303,7 +305,7 @@ export const register: Register = (on, options) => {
   on('prompt.submit', async ($, e, next) => {
     const m = /^@([^\s@]{1,24})\s+([\s\S]+)$/.exec(e.text)
     if (!m || e.command || e.isMeta || server === '' || !isSignedIn()) return next(e)
-    const outcome = await send($, makeClient($, server), m[1]!, m[2]!.trim())
+    const outcome = await send($, makeClient($, server, keep), m[1]!, m[2]!.trim())
     return outcome === null ? next(e) : { drop: outcome } // null: not a person here; let it through as a file mention
   }).catch(($, e, next) => next(e))
 
@@ -325,7 +327,7 @@ export const register: Register = (on, options) => {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (server === '') return next(e)
     const { Box, Button, Text } = $.ui.resolve(e)
-    const c = makeClient($, server)
+    const c = makeClient($, server, keep)
     const [snap, pending, here, isIn, note] = [await read($, snapshot), await read($, link), await read($, current), await read($, signedIn), await read($, notice)]
 
     if (pending) {
@@ -410,7 +412,7 @@ export const register: Register = (on, options) => {
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const { Box, Button, Input, Text } = $.ui.resolve(e)
     if (server === '') return <Text dimColor>Set the Sudare server URL in /config.</Text>
-    const c = makeClient($, server)
+    const c = makeClient($, server, keep)
     const [snap, here, isIn, shown, note] = [await read($, snapshot), await read($, current), await read($, signedIn), await read($, timeline), await read($, notice)]
     const room = Math.max(8, (e.viewport?.rows ?? 30) - snap.convs.length - 10)
     if (!isIn) {
@@ -473,7 +475,7 @@ export const register: Register = (on, options) => {
           {shown && <Button key="invite" label="Invite" onPress={() => inviteLink($, c, shown.conv, e.surface)} />}
           <Button key="refresh" label="Refresh" onPress={() => refresh($, c)} />
           <Button key="web" label="Web app" onPress={() => c.open(c.base)} />
-          <Button key="signout" label="Sign out" onPress={async () => (signOut(), refresh($, c))} />
+          <Button key="signout" label="Sign out" onPress={async () => (await c.signOut(), refresh($, c))} />
         </Box>
       </Box>
     )

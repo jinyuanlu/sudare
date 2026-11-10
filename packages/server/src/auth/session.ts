@@ -30,9 +30,9 @@ export const issueSession = async (
  * a session; the plugin then presents the secret it already holds.
  */
 export const adoptSession = async (
-  env: Env, proof: PasskeyProof, hash: string, kind: Session['kind'], device: DeviceId | null,
+  env: Env, proof: PasskeyProof, hash: string, kind: Session['kind'], device: DeviceId | null, ttlHours?: number,
 ): Promise<{ expires: number }> => {
-  const ttl = kind === 'web' ? hours(env.WEB_SESSION_HOURS, 168) : hours(env.PLUGIN_SESSION_HOURS, 8)
+  const ttl = ttlHours ?? (kind === 'web' ? hours(env.WEB_SESSION_HOURS, 168) : hours(env.PLUGIN_SESSION_HOURS, 8))
   const expires = Date.now() + ttl * 3_600_000
   await env.DB.prepare(`INSERT INTO sessions (hash, principal, kind, device, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)`)
     .bind(hash, proof.principal, kind, device, Date.now(), expires).run()

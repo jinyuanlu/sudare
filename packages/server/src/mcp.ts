@@ -15,7 +15,7 @@ import {
 import { z } from 'zod'
 import type { AgentProps } from './auth/oauth'
 import { directory, type DeviceRow } from './directory'
-import { origin, type Env } from './env'
+import { origin, rememberHours, type Env } from './env'
 import { convStub, principalStub } from './services/stubs'
 import { b64url } from './util'
 
@@ -256,14 +256,14 @@ const build = (a: Agent): McpServer => {
 
   if (a.env.PLUGIN_HUMAN_SESSION !== 'off') {
     tool('human_session_start', 'Used by the Sudare plugin itself, not by the model: starts the browser confirmation that gives the plugin (never the agent) a short-lived human session. Requires a passkey confirmation by your human.',
-      { challenge: z.string().regex(/^[A-Za-z0-9_-]{43}$/) },
-      async ({ challenge }) => {
+      { challenge: z.string().regex(/^[A-Za-z0-9_-]{43}$/), remember: z.boolean().optional() },
+      async ({ challenge, remember }) => {
         const open = await a.env.DB.prepare(`SELECT count(*) AS n FROM human_links WHERE device = ? AND expires_at > ?`).bind(a.device.id, Date.now()).first<number>('n')
         if ((open ?? 0) >= 5) return err('rate_limited')
         const link = b64url(crypto.getRandomValues(new Uint8Array(24)))
         const expires = Date.now() + 5 * 60_000
-        await a.env.DB.prepare(`INSERT INTO human_links (id, principal, device, challenge, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)`)
-          .bind(link, a.principal, a.device.id, challenge, Date.now(), expires).run()
+        await a.env.DB.prepare(`INSERT INTO human_links (id, principal, device, challenge, created_at, expires_at, remember) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+          .bind(link, a.principal, a.device.id, challenge, Date.now(), expires, remember === true && rememberHours(a.env) > 0 ? 1 : 0).run()
         return ok({ link, url: `${origin(a.env)}/link/${link}`, expires })
       })
   }

@@ -541,6 +541,32 @@ describe('devices and OAuth', () => {
     expect(await db.prepare(`SELECT count(*) AS n FROM sessions WHERE kind = 'plugin'`).first('n')).toBe(0)
   })
 
+  it('keeps a plugin session for a week only when the plugin asked and the person confirmed', async () => {
+    const { bob } = await pair()
+    const agent = await agentFor(bob)
+    const hashOf = async (secret: string) => {
+      const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(secret)))
+      return btoa(String.fromCharCode(...digest)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+    }
+    const signIn = async (remember: boolean) => {
+      const secret = `sds_${crypto.randomUUID()}${crypto.randomUUID()}`
+      const started = await agent.tool('human_session_start', { challenge: await hashOf(secret), remember })
+      const link = started.data.link as string
+      const shown = (await bob.get(`/link/${link}`)).body
+      const o = await bob.post(`/link/${link}/options`)
+      const done = await bob.post(`/link/${link}/confirm`, { id: o.body.id, response: await bob.passkey.get(o.body.options) })
+      return { shown, hours: (done.body.expires - Date.now()) / 3_600_000 }
+    }
+    const brief = await signIn(false)
+    expect(brief.shown.remember_hours).toBe(0)
+    expect(brief.hours).toBeGreaterThan(7.9)
+    expect(brief.hours).toBeLessThan(8.1)
+    const kept = await signIn(true)
+    expect(kept.shown.remember_hours).toBe(168) // the page tells the person before they confirm
+    expect(kept.hours).toBeGreaterThan(167.9)
+    expect(kept.hours).toBeLessThan(168.1)
+  })
+
   it('throttles unauthenticated callers per address', async () => {
     const from = (ip: string) => raw('/api/join/aaaaaaaaaaaaaaaaaaaaaaaa/check', { headers: { 'CF-Connecting-IP': ip } }).then((r) => r.status)
     const burst = await Promise.all(Array.from({ length: 40 }, () => from('203.0.113.9')))

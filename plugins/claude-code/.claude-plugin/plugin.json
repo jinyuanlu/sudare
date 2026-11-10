@@ -1,6 +1,6 @@
 {
   "name": "sudare",
-  "version": "0.1.6",
+  "version": "0.2.0",
   "description": "Sudare: message people from behind your agent. Inbox band, in-place approvals, discussion rounds.",
   "types": "./types/index.d.ts",
   "userConfig": {
@@ -19,6 +19,16 @@
         "off"
       ],
       "default": "on"
+    },
+    "rememberSignIn": {
+      "type": "string",
+      "title": "Remember sign-in on this machine",
+      "description": "off: sign in once each time Claude Code starts; the sign-in lives in memory only. on: keep it on this machine for 7 days. Anything running as you on this machine, your agent included, could then send and approve as you.",
+      "options": [
+        "off",
+        "on"
+      ],
+      "default": "off"
     }
   },
   "mcpServers": {
