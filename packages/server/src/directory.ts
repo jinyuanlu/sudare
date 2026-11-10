@@ -4,7 +4,7 @@ import type { AliasId, ConvId, DeviceId, DeviceView, InviteId, PrincipalId } fro
 import type { Env } from './env'
 
 export type InviteRow = {
-  id: InviteId; code_hash: string | null; conv: ConvId; kind: 'link' | 'direct' | 'bootstrap'
+  id: InviteId; code_hash: string | null; code: string | null; conv: ConvId; kind: 'link' | 'direct' | 'bootstrap' | 'room'
   by_principal: PrincipalId | null; by_handle: string; target: PrincipalId | null; bound: PrincipalId | null
   bootstrap_topic: string | null; created_at: number; expires_at: number
   used_at: number | null; used_by: PrincipalId | null; declined_at: number | null
@@ -101,8 +101,13 @@ export const directory = (env: Env) => {
     consumeInvite: (id: InviteId, p: PrincipalId) =>
       run(db, `UPDATE invites SET used_at = ?, used_by = ? WHERE id = ? AND used_at IS NULL AND declined_at IS NULL AND expires_at > ?`, Date.now(), p, id, Date.now()),
     releaseInvite: (id: InviteId, p: PrincipalId) => run(db, `UPDATE invites SET used_at = NULL, used_by = NULL WHERE id = ? AND used_by = ?`, id, p),
+    /** The room's reusable link, if one is on. */
+    roomInvite: (conv: ConvId) =>
+      first<InviteRow>(db, `SELECT * FROM invites WHERE conv = ? AND kind = 'room' AND declined_at IS NULL AND expires_at > ? ORDER BY created_at DESC LIMIT 1`, conv, Date.now()),
+    keepInviteCode: (id: InviteId, code: string) => run(db, `UPDATE invites SET code = ? WHERE id = ?`, code, id),
+    registeredVia: async (id: InviteId) => (await first<{ n: number }>(db, `SELECT count(*) AS n FROM principals WHERE invited_via = ?`, id))?.n ?? 0,
     pendingInvites: (conv: ConvId) =>
-      all<InviteRow>(db, `SELECT * FROM invites WHERE conv = ? AND kind IN ('direct', 'link') AND used_at IS NULL AND declined_at IS NULL AND expires_at > ? ORDER BY created_at`, conv, Date.now()),
+      all<InviteRow>(db, `SELECT * FROM invites WHERE conv = ? AND kind IN ('direct', 'link', 'room') AND used_at IS NULL AND declined_at IS NULL AND expires_at > ? ORDER BY created_at`, conv, Date.now()),
     declineInvite: (id: InviteId) => run(db, `UPDATE invites SET declined_at = ? WHERE id = ? AND used_at IS NULL AND declined_at IS NULL`, Date.now(), id),
 
     // housekeeping

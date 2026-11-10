@@ -15,7 +15,7 @@ import { adoptSession, clearCookie, endDeviceSessions, endSession, issueSession,
 import { deviceView, directory } from '../directory'
 import { origin, rememberHours, type Env } from '../env'
 import { pushConfigured } from '../push'
-import { acceptInvite, bootstrap, createConv, declineInvite, inviteByCode, inviteCard, inviteLink, inviteMember, inviteOpenTo } from '../services/convs'
+import { acceptInvite, bootstrap, createConv, declineInvite, inviteByCode, inviteCard, inviteLink, inviteMember, inviteOpenTo, roomLink } from '../services/convs'
 import { approveDraft } from '../services/drafts'
 import { convStub, principalSocket, principalStub } from '../services/stubs'
 import { Fail, randomToken, sha256, timingSafeEqual } from '../util'
@@ -123,7 +123,10 @@ api.post('/auth/register/options', publicWrite, async (c) => {
   const { code } = await body(c, z.object({ code: z.string().min(16).max(64) }))
   const i = await inviteByCode(c.env, code)
   // Registration exists only as a side effect of holding an unused invitation link.
-  if (!i || i.kind === 'direct' || i.used_at !== null || i.bound !== null || !inviteOpenTo(i, null)) return fail('invite_invalid')
+  const isRoom = i?.kind === 'room'
+  if (!i || i.kind === 'direct' || !inviteOpenTo(i, null) || (!isRoom && (i.used_at !== null || i.bound !== null))) return fail('invite_invalid')
+  // A room link registers many people, but not without limit.
+  if (isRoom && (await directory(c.env).registeredVia(i.id)) >= 50) return fail('invite_invalid')
   return c.json(await registerOptions(c.env, i.id))
 })
 
@@ -131,7 +134,8 @@ api.post('/auth/register/verify', publicWrite, async (c) => {
   const { id, response } = await body(c, zWebAuthn)
   const r = await registerVerify(c.env, id, response)
   if (!r.ok) return send(c, r)
-  if ((await directory(c.env).bindInvite(r.value.invite, r.value.proof.principal)) !== 1) {
+  const via = await directory(c.env).invite(r.value.invite)
+  if (via?.kind !== 'room' && (await directory(c.env).bindInvite(r.value.invite, r.value.proof.principal)) !== 1) {
     await c.env.DB.batch([
       c.env.DB.prepare(`DELETE FROM credentials WHERE principal = ?`).bind(r.value.proof.principal),
       c.env.DB.prepare(`DELETE FROM principals WHERE id = ?`).bind(r.value.proof.principal),
@@ -298,7 +302,8 @@ api.patch('/convs/:id', anyHuman, async (c) => {
 
 api.post('/convs/:id/invites', anyHuman, async (c) => {
   const id = param(c, 'id', isConvId)
-  const input = await body(c, z.union([z.object({ to: zAliasRef }), z.object({ link: z.literal(true) })]))
+  const input = await body(c, z.union([z.object({ to: zAliasRef }), z.object({ link: z.literal(true) }), z.object({ room: z.literal(true) })]))
+  if ('room' in input) return send(c, await roomLink(c.env, me(c), id), 201)
   return 'to' in input
     ? send(c, await inviteMember(c.env, me(c), id, input.to as AliasRef).then((r) => (r.ok ? ok({ invite: r.value }) : r)), 201)
     : send(c, await inviteLink(c.env, me(c), id), 201)
@@ -310,7 +315,7 @@ api.get('/convs/:id/invites', anyHuman, async (c) => {
   if (!(await conv(c, id).isMember(me(c)))) return fail('not_member')
   const [pending, known] = await Promise.all([directory(c.env).pendingInvites(id), directory(c.env).contacts(me(c))])
   const nameOf = (p: PrincipalId | null) => known.find((k) => k.principal === p)?.handle ?? null
-  return c.json(pending.map((i) => ({ id: i.id, kind: i.kind, name: i.kind === 'direct' ? nameOf(i.target) : null, expires: i.expires_at, mine: i.by_principal === me(c) })))
+  return c.json(pending.map((i) => ({ id: i.id, kind: i.kind as 'direct' | 'link' | 'room', name: i.kind === 'direct' ? nameOf(i.target) : null, expires: i.expires_at, mine: i.by_principal === me(c) })))
 })
 
 /** The person who sent an invitation can withdraw it while it is unanswered. */

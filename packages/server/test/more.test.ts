@@ -3,7 +3,7 @@ import { env } from 'cloudflare:workers'
 import type { ConvId } from '@sudare/protocol'
 import { describe, expect, it } from 'vitest'
 import { validPushEndpoint } from '../src/push'
-import { ORIGIN, agentFor, db, eventually, founder, invite, raw, type Person } from './harness'
+import { ORIGIN, agentFor, db, eventually, founder, invite, joinByLink, raw, type Person } from './harness'
 
 const convStub = (conv: ConvId) => (env as any).CONVERSATION.get((env as any).CONVERSATION.idFromName(conv))
 const texts = async (who: Person, conv: ConvId) =>
@@ -93,6 +93,33 @@ describe('membership over time', () => {
     expect((await bob.post(`/invites/${sent.body.invite}/accept`, {})).body.error).toBe('invite_invalid')
     await eventually(async () => (await bob.get('/invites')).body.length === 0, 'withdrawn invitation disappears')
     expect(side).toBeTruthy()
+  })
+
+  it('a room link lets several people in until it is turned off', async () => {
+    const { who: ann, conv } = await founder()
+    const made = await ann.post(`/convs/${conv}/invites`, { room: true })
+    expect(made.status).toBe(201)
+    const again = await ann.post(`/convs/${conv}/invites`, { room: true })
+    expect(again.body.url).toBe(made.body.url) // the same link each time it is asked for
+    const url = made.body.url as string
+
+    const { who: bob } = await joinByLink('bob', url)
+    const { who: cy } = await joinByLink('cy', url)
+    expect(((await ann.get(`/convs/${conv}`)).body.members as any[]).map((m) => m.handle).sort()).toEqual(['ann', 'bob', 'cy'])
+    expect((await bob.post(`/join/${url.split('/j/')[1]}/accept`, {})).body.error).toBe('already_member')
+    // Someone who already has an account can use it too.
+    const dee = (await founder('dee')).who
+    expect((await dee.post(`/join/${url.split('/j/')[1]}/accept`, { handle: 'dee' })).status).toBe(200)
+
+    const pending = (await cy.get(`/convs/${conv}/invites`)).body as any[]
+    expect(pending.filter((p) => p.kind === 'room')).toHaveLength(1)
+    expect((await cy.del(`/convs/${conv}/invites/${made.body.id}`)).body.error).toBe('invite_invalid') // only its maker turns it off
+    expect((await ann.del(`/convs/${conv}/invites/${made.body.id}`)).status).toBe(200)
+    expect((await raw(`/api/join/${url.split('/j/')[1]}/check`).then((r) => r.json<any>())).valid).toBe(false)
+    const late = (await founder('eve')).who
+    expect((await late.post(`/join/${url.split('/j/')[1]}/accept`, { handle: 'eve' })).body.error).toBe('invite_invalid')
+    // A new one can be made afterwards, and it is a different link.
+    expect((await ann.post(`/convs/${conv}/invites`, { room: true })).body.url).not.toBe(url)
   })
 
   it('respects a creator-only invitation policy', async () => {

@@ -13,6 +13,7 @@ const InviteSection = ({ view }: { view: ConvView }) => {
   const act = useAction()
   const [sent, setSent] = useState<string[]>([])
   const [link, setLink] = useState<InviteLink | null>(null)
+  const [once, setOnce] = useState(false)
   const pending = useLoad(() => api.pendingInvites(view.id), [view.id])
   const key = (c: ContactView) => c.person
   // One row per person, and nobody who is already in this room.
@@ -31,12 +32,18 @@ const InviteSection = ({ view }: { view: ConvView }) => {
   return (
     <section>
       <h3>{t('members.invite')}</h3>
-      <div class="row">
-        <button type="button" class="primary" disabled={act.busy} onClick={() => void act.run(async () => { setLink(await api.inviteLink(view.id)); pending.reload() })}>{t('members.link')}</button>
+      <div class="row wrap">
+        <button type="button" class="primary" disabled={act.busy} onClick={() => void act.run(async () => {
+          const made = await api.roomLink(view.id)
+          setLink(made); setOnce(false)
+          await navigator.clipboard?.writeText(made.url).catch(() => undefined)
+          pending.reload()
+        })}>{t('members.roomLink')}</button>
+        <button type="button" disabled={act.busy} onClick={() => void act.run(async () => { setLink(await api.inviteLink(view.id)); setOnce(true); pending.reload() })}>{t('members.link')}</button>
       </div>
       {link ? (
         <div class="once">
-          <p class="small">{t('members.linkOnce', { when: fmtDate(link.expires) })}</p>
+          <p class="small">{t(once ? 'members.linkOnce' : 'members.roomLinkNote', { when: fmtDate(link.expires) })}</p>
           <input readOnly value={link.url} aria-label={t('members.linkLabel')} onFocus={(e) => e.currentTarget.select()} />
           <CopyButton text={link.url} />
         </div>
@@ -46,8 +53,8 @@ const InviteSection = ({ view }: { view: ConvView }) => {
         <ul class="rows" aria-label={t('members.pending')}>
           {(pending.data ?? []).map((p) => (
             <li key={p.id}>
-              <span>{p.kind === 'link' ? t('members.pendingLink') : (p.name ?? t('members.pendingSomeone'))} <span class="muted small">· {t('members.pending')}</span></span>
-              {p.mine ? <button type="button" class="link" disabled={act.busy} onClick={() => withdraw(p.id)}>{t('members.withdraw')}</button> : null}
+              <span>{p.kind === 'room' ? t('members.pendingRoom') : p.kind === 'link' ? t('members.pendingLink') : (p.name ?? t('members.pendingSomeone'))} <span class="muted small">· {t(p.kind === 'room' ? 'members.roomOn' : 'members.pending')}</span></span>
+              {p.mine ? <button type="button" class="link" disabled={act.busy} onClick={() => withdraw(p.id)}>{t(p.kind === 'room' ? 'members.turnOff' : 'members.withdraw')}</button> : null}
             </li>
           ))}
         </ul>

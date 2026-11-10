@@ -309,13 +309,13 @@ async function openPrivate($: Engine, c: Client, conv: string, person: SudarePer
   await openConv($, c, made)
 }
 
-/** A one-time invitation link for this conversation, copied to the clipboard. */
+/** The room's link, copied to the clipboard: one link for everyone you want here. */
 async function inviteLink($: Engine, c: Client, conv: string, surface: 'terminal' | 'desktop' | 'vscode' | 'mobile'): Promise<void> {
-  const r = await c.api('POST', `/convs/${conv}/invites`, { link: true })
+  const r = await c.api('POST', `/convs/${conv}/invites`, { room: true })
   const url = str((r.body as Json).url)
   if (!r.ok || url === '') return void (await say($, `Could not make a link: ${why(r)}.`))
   const copied = await $.ui.copy({ text: url, surface }).catch(() => ({ isCopied: false }))
-  await say($, `${copied.isCopied ? 'Invitation link copied' : 'Invitation link'} (works once, 7 days): ${url}`)
+  await say($, `${copied.isCopied ? 'Invitation link copied' : 'Invitation link'}. Anyone with it can join this room for 7 days: ${url}`)
 }
 
 /** Reply in the panel with the sender already chosen, so a slip of the keyboard cannot send it to Claude instead. */

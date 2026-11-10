@@ -140,6 +140,24 @@ export const inviteLink = async (env: Env, me: PrincipalId, conv: ConvId): Promi
   return ok({ id, url: `${origin(env)}/j/${code}`, expires })
 }
 
+/**
+ * The room link: one link that anyone holding it can use to join, until a
+ * member turns it off or it expires. Asking again returns the same link.
+ */
+export const roomLink = async (env: Env, me: PrincipalId, conv: ConvId): Promise<Result<{ id: InviteId; url: string; expires: number }>> => {
+  const dir = directory(env)
+  const info = await convStub(env, conv).inviteInfo(me)
+  if (!info.ok) return info
+  const existing = await dir.roomInvite(conv)
+  if (existing?.code) return ok({ id: existing.id, url: `${origin(env)}/j/${existing.code}`, expires: existing.expires_at })
+  const code = b64url(crypto.getRandomValues(new Uint8Array(24)))
+  const id = newInviteId()
+  const expires = Date.now() + WEEK
+  await dir.createInvite({ id, code_hash: await sha256(code), conv, kind: 'room', by_principal: me, by_handle: info.value.by, target: null, bootstrap_topic: null, expires_at: expires })
+  await dir.keepInviteCode(id, code)
+  return ok({ id, url: `${origin(env)}/j/${code}`, expires })
+}
+
 /** The operator's one-time entry: a conversation that comes into being when its link is first accepted. */
 export const bootstrap = async (env: Env, topic: string): Promise<{ url: string; expires: number }> => {
   const code = b64url(crypto.getRandomValues(new Uint8Array(24)))
@@ -156,6 +174,7 @@ export const inviteByCode = async (env: Env, code: string): Promise<InviteRow | 
 
 /** Is this invitation open to this person right now? */
 export const inviteOpenTo = (i: InviteRow, me: PrincipalId | null): boolean =>
+  i.kind === 'room' ? i.declined_at === null && i.expires_at > Date.now() :
   i.declined_at === null && i.expires_at > Date.now() &&
   (i.used_at === null || (me !== null && i.used_by === me)) &&
   (i.target === null || i.target === me) && (i.bound === null || i.bound === me)
@@ -179,6 +198,14 @@ export const acceptInvite = async (env: Env, me: PrincipalId, i: InviteRow, hand
   const wanted = normalizeHandle(handle ?? self?.default_handle ?? '')
   if (!wanted.ok) return wanted
   const stub = convStub(env, i.conv)
+  if (i.kind === 'room') {
+    // Many people may use a room link; each person's join is idempotent on its own key.
+    if (await stub.isMember(me)) return err('already_member')
+    const r = await stub.exec(i.conv, { t: 'join', id: `join:${i.id}:${me}` as EventId, member: { principal: me, alias: newAliasId(), handle: wanted.value } })
+    if (!r.ok) return err(r.error, r.detail)
+    await dir.setDefaultHandle(me, wanted.value)
+    return ok({ conv: i.conv })
+  }
   const retry = i.used_by === me
   // Someone already inside must not burn a link meant for a newcomer.
   if (!retry && i.kind !== 'bootstrap' && (await stub.isMember(me))) return err('already_member')

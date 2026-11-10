@@ -110,7 +110,7 @@ export type InviteView = {
 /** `person` is stable for the same person across rooms, but only meaningful to the viewer it was computed for. */
 export type ContactView = { conv: ConvId; topic: string; alias: AliasId; handle: string; person: string }
 
-export type PendingInvite = { id: InviteId; kind: 'direct' | 'link'; name: string | null; expires: number; mine: boolean }
+export type PendingInvite = { id: InviteId; kind: 'direct' | 'link' | 'room'; name: string | null; expires: number; mine: boolean }
 
 export type DeviceView = {
   id: DeviceId

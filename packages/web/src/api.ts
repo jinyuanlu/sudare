@@ -97,6 +97,7 @@ export const api = {
   patchConv: (id: ConvId, patch: { topic?: string; retention_days?: number }) => request<ConvView>('PATCH', `/convs/${id}`, patch),
   invite: (id: ConvId, to: AliasRef) => post<{ invite: InviteId }>(`/convs/${id}/invites`, { to }),
   inviteLink: (id: ConvId) => post<InviteLink>(`/convs/${id}/invites`, { link: true }),
+  roomLink: (id: ConvId) => post<InviteLink>(`/convs/${id}/invites`, { room: true }),
   leave: (id: ConvId) => post(`/convs/${id}/leave`),
   archive: (id: ConvId) => post(`/convs/${id}/archive`),
   events: (id: ConvId, page: { before?: number; after?: number; limit?: number }) => get<EventsResponse>(`/convs/${id}/events${q(page)}`),
