@@ -6,7 +6,7 @@ import { t, type Lang } from '../i18n'
 import { addPasskey } from '../passkey'
 import { navigate } from '../router'
 import { LANG_KEY, setState, signedOut, useStore } from '../store'
-import { CopyButton, ErrorNote, Field, Loading, Page } from '../ui'
+import { CopyButton, ErrorNote, Field, Loading, Page, QuickStart } from '../ui'
 import { base64UrlToBytes, fmtDate, isIOS, isStandalone } from '../util'
 
 const pushSupported = (): boolean => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window
@@ -144,6 +144,7 @@ const Devices = () => {
   return (
     <section>
       <h2>{t('devices.title')}</h2>
+      <QuickStart open />
       <p class="small">{t('devices.connect')}</p>
       <div class="once"><input readOnly class="mono" value={mcp} aria-label={t('devices.mcpUrl')} onFocus={(e) => e.currentTarget.select()} /><CopyButton text={mcp} /></div>
       <ErrorNote error={devices.error} />

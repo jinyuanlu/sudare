@@ -52,6 +52,27 @@ export const Modal = ({ title, onClose, children }: { title: string; onClose: ()
   )
 }
 
+const INSTALL = 'claude plugin install sudare --marketplace jinyuanlu/sudare'
+const PUBLIC_INSTANCE = 'https://sudare.luke.archi'
+
+/** How to get Sudare into Claude Code: one command and two clicks. Optional, so it stays folded unless asked for. */
+export const QuickStart = ({ open = false, onDismiss }: { open?: boolean; onDismiss?: () => void }) => (
+  <details class="quick" open={open}>
+    <summary>{t('quick.title')}</summary>
+    <p class="muted small">{t('quick.lead')}</p>
+    <ol>
+      <li>
+        {t('quick.s1')}
+        <div class="row"><code>{INSTALL}</code> <CopyButton text={INSTALL} label={t('quick.copy')} /></div>
+      </li>
+      {location.origin !== PUBLIC_INSTANCE ? <li>{t('quick.server', { origin: location.origin })}</li> : null}
+      <li>{t('quick.s2')}</li>
+      <li>{t('quick.s3')}</li>
+    </ol>
+    {onDismiss ? <button type="button" class="link" onClick={onDismiss}>{t('quick.dismiss')}</button> : null}
+  </details>
+)
+
 export const CopyButton = ({ text, label }: { text: string; label?: string }) => {
   const [done, setDone] = useState(false)
   const copy = () => {

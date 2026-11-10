@@ -194,3 +194,13 @@ textarea { resize: vertical; line-height: 1.4; }
 .diff .del { background: var(--del); text-decoration: line-through; }
 
 .here { color: #2e9e5b; font-size: .7em; vertical-align: middle; }
+
+.quick { margin: 1rem 0; padding: .75rem 1rem; border: 1px solid var(--line, #d9d6c8); border-radius: .75rem; background: var(--surface, #fff); }
+.quick summary { cursor: pointer; font-weight: 600; }
+.quick ol { margin: .5rem 0; padding-left: 1.25rem; }
+.quick li { margin: .4rem 0; }
+.quick code { font-size: .85em; overflow-wrap: anywhere; }
+.conv > .quick { margin: .5rem .75rem; }
+.quick ol { list-style: decimal; }
+.quick .row { display: flex; flex-direction: column; align-items: flex-start; gap: .4rem; margin-top: .3rem; }
+.quick code { display: block; max-width: 100%; white-space: nowrap; overflow-x: auto; padding: .4rem .6rem; border-radius: .4rem; background: color-mix(in srgb, currentColor 8%, transparent); }

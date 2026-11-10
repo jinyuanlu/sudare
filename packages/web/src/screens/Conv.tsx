@@ -6,7 +6,7 @@ import { useAction, useVisible } from '../hooks'
 import { t } from '../i18n'
 import { Link, navigate } from '../router'
 import { refresh, useStore } from '../store'
-import { ErrorNote, Field, Loading, Modal, Page } from '../ui'
+import { ErrorNote, Field, Loading, Modal, Page, QuickStart } from '../ui'
 import { MembersDialog } from './Members'
 import { OpenRoundDialog, RoundBanner } from './Round'
 import { Composer, Timeline, useTimeline } from './Timeline'
@@ -106,6 +106,7 @@ export const ConvScreen = ({ id, at }: { id: ConvId; at: number | null }) => {
     void api.read(id, lastSeq).then(() => refresh('convs', 'inbox'), () => { marked.current = 0 })
   }, [tl.ready, visible, atBottom, lastSeq])
 
+  const [showQuick, setShowQuick] = useState(() => localStorage.getItem('sudare.quick') !== 'hidden')
   if (!view) return <Page title={t('conv.title')}>{conv.error ? <ErrorNote error={conv.error} /> : <Loading />}</Page>
 
   const joinedLater = new Map<AliasId, string>()
@@ -129,6 +130,7 @@ export const ConvScreen = ({ id, at }: { id: ConvId; at: number | null }) => {
       actions={<><Link class="button" href={`/c/${id}/notes`}>{t('notes.title')}</Link><Menu view={view} openRound={round !== null} onPanel={setPanel} onError={setFailure} /></>}
     >
       <div class="conv">
+        {showQuick ? <QuickStart onDismiss={() => { localStorage.setItem('sudare.quick', 'hidden'); setShowQuick(false) }} /> : null}
         <ErrorNote error={failure} />
         {round ? <RoundBanner view={view} round={round} name={name} onChanged={conv.reload} /> : null}
         <Timeline view={view} tl={tl} name={name} focus={at} onReply={writable ? setReply : null} onBottom={setAtBottom} />

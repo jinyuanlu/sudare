@@ -9,7 +9,7 @@ import { t } from '../i18n'
 import { confirmLink, registerWithInvite, signIn } from '../passkey'
 import { Link, navigate } from '../router'
 import { refresh } from '../store'
-import { ErrorNote, Field, Loading, Solo } from '../ui'
+import { ErrorNote, Field, Loading, QuickStart, Solo } from '../ui'
 import { fmtDate, isCode } from '../util'
 
 export const Login = ({ next, me }: { next: string; me: Me | null | undefined }) => {
@@ -108,7 +108,7 @@ export const Join = ({ code, me }: { code: string; me: Me | null | undefined }) 
       </>
     )
   }
-  return <Solo title={t('join.title')}>{body()}</Solo>
+  return <Solo title={t('join.title')}>{body()}<QuickStart /></Solo>
 }
 
 export const LinkScreen = ({ id }: { id: string }) => {
