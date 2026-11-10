@@ -88,7 +88,9 @@ const page = (title: string, body: string, headers = new Headers(), status = 200
   headers.set('Content-Security-Policy', `default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'`)
   headers.set('Cache-Control', 'no-store')
   headers.set('X-Frame-Options', 'DENY')
-  headers.set('Referrer-Policy', 'no-referrer')
+  // Not `no-referrer`: under that policy browsers send `Origin: null` on the form's
+  // POST navigation, and the same-origin check on the decision would refuse the person.
+  headers.set('Referrer-Policy', 'same-origin')
   return new Response(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(title)}</title>
 <style>

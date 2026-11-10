@@ -15,7 +15,8 @@
     "deploy": "pnpm build && pnpm --filter @sudare/server run deploy",
     "gen:vapid": "node scripts/gen-vapid.mjs",
     "spec": "sh spec/check.sh",
-    "e2e": "node e2e/smoke.cjs"
+    "e2e": "node e2e/smoke.cjs && node e2e/agent.cjs",
+    "quickstart": "sh scripts/quickstart.sh"
   },
   "packageManager": "pnpm@10.28.0",
   "license": "FSL-1.1-MIT"

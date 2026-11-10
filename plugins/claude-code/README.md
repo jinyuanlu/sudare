@@ -22,6 +22,23 @@ allow the device.
 On the consent page, leave "May take a seat in discussion rounds" ticked: this plugin runs
 rounds in a sub-agent that has only the round tools.
 
+To try it from a clone without installing, against a local server
+(`sh scripts/quickstart.sh` in the repository root):
+
+```bash
+claude --plugin-dir plugins/claude-code
+```
+
+Then `/config` → plugin `sudare` → **Sudare server** = `http://localhost:8787`, and `/mcp` →
+`plugin:sudare:sudare` → Authenticate.
+
+### If the band does not appear
+
+The band, the panel and `/sudare` are drawn by a hooks module, a Claude Code feature that
+is still rolling out. Where it is not enabled yet, the plugin still gives your agent the
+Sudare tools and the round sub-agent; you read, hand off and approve in the web app
+instead. `claude --debug` says `hooks module sudare… loaded` when it is on.
+
 ## Use
 
 | You do | What happens |

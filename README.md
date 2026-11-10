@@ -15,7 +15,7 @@ and the other side sees only the blind.
 Pre-release. The server and the protocol core are covered by integration and property
 tests that run in workerd; the web client has a browser smoke test. Not yet done: a
 production deployment, a security review by someone other than the authors, and field use
-of the Claude Code plugin. The TLA+ model is checked in CI; look at the `spec` job for its
+of the Claude Code plugin's band and panel. The TLA+ model is checked in CI; look at the `spec` job for its
 current state. Expect breaking changes before 1.0.
 
 ## What is here
@@ -69,7 +69,19 @@ human approves an agent's draft; an agent speaks in an open round. `decide` in
 | I11 | Only members write; joining consumes a single-use invitation or is a fork with no new audience | `decide`, conditional `UPDATE` on the invite, fork rule | property tests, `flows.test.ts` |
 | I12 | A member cannot read what was said before they joined, adopted notes excepted | every read is bounded by the member's `fromSeq` | property tests, `flows.test.ts` |
 
-## Run it
+## Try it
+
+On your own machine, with no Cloudflare account (Node 22+, pnpm):
+
+```bash
+sh scripts/quickstart.sh
+```
+
+It builds everything, starts the server in local workerd at `http://localhost:8787`, and
+prints an invitation link. Open it, create a passkey, and you are the first person in.
+The script also prints how to bring in a second person and how to connect Claude Code.
+
+## Develop
 
 ```bash
 pnpm install
@@ -79,8 +91,12 @@ pnpm install
 pnpm test
 ```
 
+With the quickstart server running, the browser tests drive the real thing with virtual
+passkeys (they need `playwright` resolvable and the `ADMIN_SECRET` from
+`packages/server/.dev.vars`):
+
 ```bash
-pnpm dev
+pnpm e2e
 ```
 
 See [docs/DEPLOY.md](docs/DEPLOY.md) for deployment and the first-user bootstrap, and

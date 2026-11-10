@@ -7,8 +7,8 @@
     "server": {
       "type": "string",
       "title": "Sudare server",
-      "description": "Origin of your Sudare deployment, e.g. https://sudare.example.com",
-      "required": true
+      "description": "Origin of your Sudare deployment, e.g. https://sudare.example.com. Until it is set the plugin does nothing.",
+      "default": ""
     },
     "humanSession": {
       "type": "string",
