@@ -174,6 +174,12 @@ export class PrincipalDO extends DurableObject<Env> {
       case 'message':
         this.append({ kind: 'delivered', msg: e.id, conv: d.conv, addressed }, { ...at, msg: e.id })
         this.sql.exec(`INSERT INTO search (text, conv, kind, ref, cseq, ts) VALUES (?, ?, 'message', ?, ?, ?)`, b.text, d.conv, e.id, e.seq, e.ts)
+        // Answering is dealing with it: when this person's own message arrives (sent
+        // directly or approved from a draft), what was waiting for them here is done.
+        if (mine) {
+          const open = this.all<{ msg: string }>(`SELECT msg FROM items WHERE conv = ? AND s != 'done' AND cseq < ?`, d.conv, e.seq)
+          for (const o of open) this.move(o.msg as EventId, { a: 'done' }, { scope: 'human' })
+        }
         if (addressed) {
           const state: ItemState = { s: 'unread' }
           this.sql.exec(
@@ -312,7 +318,7 @@ export class PrincipalDO extends DurableObject<Env> {
 
   /** A human action on an addressed message. Returns what a two-person receipt needs. */
   async humanAct(
-    msg: EventId, action: Extract<ItemAction, { a: 'read' | 'handoff' | 'done' }>,
+    msg: EventId, action: Extract<ItemAction, { a: 'read' | 'handoff' | 'done' | 'take_back' }>,
   ): Promise<Result<{ conv: ConvId; state: ItemState['s'] }>> {
     const r = this.ctx.storage.transactionSync(() => this.move(msg, action, { scope: 'human' }))
     if (!r.ok) return r

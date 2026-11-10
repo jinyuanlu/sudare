@@ -3,7 +3,9 @@
 //   unread --read--> read
 //   unread|read --handed_off--> handed_off
 //   handed_off --claimed(device)--> claimed          (agent, compare-and-set)
-//   claimed --done--> done                           (the claiming device, or a human)
+//   claimed --done--> done                           (the claiming device)
+//   unread|read|handed_off|claimed --done--> done    (a human: "I have dealt with this")
+//   handed_off|claimed --taken_back--> read          (a human changes their mind)
 //   claimed --claim_expired--> handed_off            (server, 10 min without heartbeat)
 //
 // Any transition not listed is rejected. Who may trigger which transition is
@@ -29,6 +31,7 @@ export type ItemAction =
   | { a: 'claim' }
   | { a: 'heartbeat' }
   | { a: 'done' }
+  | { a: 'take_back' }
   | { a: 'expire' }
 
 export type Transition = { state: ItemState; log: InboxBody | null }
@@ -62,10 +65,17 @@ export const transition = (
       if (state.s !== 'claimed') return refused
       return state.device === actor.device ? moved({ ...state, beat: now }, null) : err('not_claimer')
     case 'done':
-      if (state.s !== 'claimed') return refused
-      if (actor.scope === 'agent' && actor.device !== state.device) return err('not_claimer')
       if (actor.scope === 'server') return err('forbidden_scope')
+      if (state.s === 'done') return refused
+      // A person may close a message at any point; an agent only the one it holds.
+      if (actor.scope === 'agent') {
+        if (state.s !== 'claimed') return refused
+        if (actor.device !== state.device) return err('not_claimer')
+      }
       return moved({ s: 'done' }, { kind: 'done', msg })
+    case 'take_back':
+      if (actor.scope !== 'human') return err('forbidden_scope')
+      return state.s === 'handed_off' || state.s === 'claimed' ? moved({ s: 'read' }, { kind: 'taken_back', msg }) : refused
     case 'expire':
       if (actor.scope !== 'server') return err('forbidden_scope')
       return claimExpired(state, now)
@@ -94,6 +104,8 @@ export const foldItem = (events: readonly { ts: number; body: InboxBody }[]): It
         return state && state.s === 'claimed' ? { s: 'handed_off', mode: state.mode } : state
       case 'done':
         return { s: 'done' }
+      case 'taken_back':
+        return { s: 'read' }
       default:
         return state
     }

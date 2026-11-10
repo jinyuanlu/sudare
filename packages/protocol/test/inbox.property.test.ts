@@ -15,6 +15,7 @@ const action: fc.Arbitrary<ItemAction> = fc.oneof(
   fc.constant<ItemAction>({ a: 'claim' }),
   fc.constant<ItemAction>({ a: 'heartbeat' }),
   fc.constant<ItemAction>({ a: 'done' }),
+  fc.constant<ItemAction>({ a: 'take_back' }),
   fc.constant<ItemAction>({ a: 'expire' }),
 )
 const steps = fc.array(fc.tuple(action, actor, fc.integer({ min: 0, max: LIMITS.claimTimeoutMs })), { maxLength: 40 })
@@ -24,7 +25,8 @@ const TABLE: Record<string, { from: ItemState['s'][]; to: ItemState['s']; by: Ac
   read: { from: ['unread'], to: 'read', by: ['human'] },
   handed_off: { from: ['unread', 'read'], to: 'handed_off', by: ['human'] },
   claimed: { from: ['handed_off'], to: 'claimed', by: ['agent'] },
-  done: { from: ['claimed'], to: 'done', by: ['agent', 'human'] },
+  done: { from: ['unread', 'read', 'handed_off', 'claimed'], to: 'done', by: ['agent', 'human'] },
+  taken_back: { from: ['handed_off', 'claimed'], to: 'read', by: ['human'] },
   claim_expired: { from: ['claimed'], to: 'handed_off', by: ['server'] },
 }
 
@@ -59,6 +61,13 @@ describe('inbox item state machine', () => {
         if (before.s !== 'claimed') return
         if (body.kind === 'claimed') throw new Error('claimed twice')
         if (body.kind === 'done' && by.scope === 'agent') expect(by.device).toBe(before.device)
+      })
+    })))
+
+  it('an agent can only finish a message it has claimed; a person can finish any', () =>
+    fc.assert(fc.property(steps, (seq) => {
+      walk(seq, (before, body, by) => {
+        if (body.kind === 'done' && by.scope === 'agent') expect(before.s).toBe('claimed')
       })
     })))
 

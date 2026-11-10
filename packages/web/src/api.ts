@@ -112,6 +112,7 @@ export const api = {
   inboxRead: (msg: EventId) => post<{ state: InboxItem['state'] }>(`/inbox/${msg}/read`),
   inboxHandoff: (msg: EventId, mode: HandoffMode) => post<{ state: InboxItem['state'] }>(`/inbox/${msg}/handoff`, { mode }),
   inboxDone: (msg: EventId) => post<{ state: InboxItem['state'] }>(`/inbox/${msg}/done`),
+  inboxTakeBack: (msg: EventId) => post<{ state: InboxItem['state'] }>(`/inbox/${msg}/takeback`),
 
   drafts: () => get<DraftView[]>('/drafts'),
   approveDraft: (id: DraftId, text: string | null) => post<NonNullable<DraftView['result']>>(`/drafts/${id}/approve`, text === null ? {} : { text }),

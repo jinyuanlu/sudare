@@ -93,6 +93,7 @@ const apply = (events: InboxEvent[]): void => {
       case 'handed_off':
       case 'claimed':
       case 'claim_expired':
+      case 'taken_back':
       case 'done':
         lists.add('inbox').add('convs')
         break

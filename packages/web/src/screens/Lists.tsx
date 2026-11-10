@@ -12,47 +12,47 @@ import { ErrorNote, Loading, Page } from '../ui'
 import { fmtTime } from '../util'
 import { InviteCard } from './Auth'
 
-const InboxRow = ({ item }: { item: InboxItem }) => {
+const InboxRow = ({ item, hasAgent }: { item: InboxItem; hasAgent: boolean }) => {
   const act = useAction()
   const run = (call: () => Promise<unknown>) => () => void act.run(async () => {
     await call()
     await refresh('inbox', 'convs')
   })
-  const handoff = (
-    <>
-      <button type="button" disabled={act.busy} onClick={run(() => api.inboxHandoff(item.msg, 'readonly'))}>{t('inbox.handoffRead')}</button>
-      <button type="button" disabled={act.busy} onClick={run(() => api.inboxHandoff(item.msg, 'full'))}>{t('inbox.handoffFull')}</button>
-    </>
-  )
+  const open = `/c/${item.conv}?at=${item.seq}`
+  const waiting = item.state === 'unread' || item.state === 'read'
+  const withAgent = item.state === 'handed_off' || item.state === 'claimed'
   return (
     <li class={`card state-${item.state}`}>
       <div class="msg-head">
         <strong>{item.from}</strong>
-        <Link href={`/c/${item.conv}?at=${item.seq}`}>{item.topic || t('join.untitled')}</Link>
+        <Link href={open}>{item.topic || t('join.untitled')}</Link>
         <time class="muted small" dateTime={new Date(item.ts).toISOString()}>{fmtTime(item.ts)}</time>
-        <span class="tag">{t(`inbox.state.${item.state}`)}</span>
       </div>
       <p class="msg-text">{item.text}</p>
-      {item.state === 'handed_off' ? <p class="muted small" role="status">{t('inbox.waiting', { mode: t(`inbox.mode.${item.mode ?? 'readonly'}`) })}</p> : null}
-      {item.state === 'claimed' ? <p class="muted small" role="status">{t('inbox.working')}</p> : null}
+      {withAgent ? <p class="muted small" role="status">{t(item.state === 'claimed' ? 'inbox.working' : 'inbox.waiting')}</p> : null}
       <ErrorNote error={act.error} />
       <div class="row wrap">
-        {item.state === 'unread' ? <button type="button" class="primary" disabled={act.busy} onClick={run(() => api.inboxRead(item.msg))}>{t('inbox.markRead')}</button> : null}
-        {item.state === 'unread' || item.state === 'read' ? handoff : null}
-        {item.state === 'claimed' ? <button type="button" disabled={act.busy} onClick={run(() => api.inboxDone(item.msg))}>{t('inbox.markDone')}</button> : null}
-        <Link class="button" href={`/c/${item.conv}?at=${item.seq}`}>{t('inbox.open')}</Link>
+        {waiting ? <Link class="button primary" href={open}>{t('inbox.reply')}</Link> : null}
+        {waiting && hasAgent ? <button type="button" disabled={act.busy} onClick={run(() => api.inboxHandoff(item.msg, 'readonly'))}>{t('inbox.ask')}</button> : null}
+        {withAgent ? <button type="button" disabled={act.busy} onClick={run(() => api.inboxTakeBack(item.msg))}>{t('inbox.takeBack')}</button> : null}
+        {withAgent ? <Link class="button" href={open}>{t('inbox.open')}</Link> : null}
+        <button type="button" class="link" disabled={act.busy} onClick={run(() => api.inboxDone(item.msg))}>{t('inbox.markDone')}</button>
       </div>
+      {waiting && hasAgent ? <p class="muted small">{t('inbox.askHint')}</p> : null}
+      {waiting && !hasAgent ? <p class="muted small"><Link href="/settings">{t('inbox.connect')}</Link></p> : null}
     </li>
   )
 }
 
 export const InboxScreen = () => {
   const items = useStore((s) => s.inbox)
+  const devices = useLoad(api.devices, [])
+  const hasAgent = (devices.data?.length ?? 0) > 0
   return (
     <Page title={t('inbox.title')}>
       <p class="muted small">{t('inbox.lead')}</p>
       {items === null ? <Loading /> : items.length === 0 ? <p class="muted pad">{t('inbox.empty')}</p> : (
-        <ul class="cards">{items.map((i) => <InboxRow key={i.msg} item={i} />)}</ul>
+        <ul class="cards">{items.map((i) => <InboxRow key={i.msg} item={i} hasAgent={hasAgent} />)}</ul>
       )}
     </Page>
   )

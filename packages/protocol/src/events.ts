@@ -82,6 +82,7 @@ export type InboxBody =
   | { kind: 'handed_off'; msg: EventId; mode: HandoffMode }
   | { kind: 'claimed'; msg: EventId; device: DeviceId }
   | { kind: 'claim_expired'; msg: EventId }
+  | { kind: 'taken_back'; msg: EventId }
   | { kind: 'done'; msg: EventId }
   | { kind: 'draft_created'; draft: DraftId; conv: ConvId | null; target: DraftTarget; text: string; device: DeviceId }
   | { kind: 'draft_approved'; draft: DraftId; as: EventId }

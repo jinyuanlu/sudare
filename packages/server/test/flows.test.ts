@@ -158,9 +158,30 @@ describe('the human gate', () => {
     expect((await agent.tool('history', { conv })).data.error).toBe('not_readable')
     const receipts = await eventually(async () => {
       const r = (await events(ann, conv)).flatMap((e) => (e.body.kind === 'receipt' ? [e.body.state] : []))
-      return r.length === 2 ? r : null
+      return r.length === 1 ? r : null
     }, 'receipts in the two-person conversation')
-    expect(receipts).toEqual(['handed_off', 'done'])
+    expect(receipts).toEqual(['done']) // asking an agent is not announced to the other person
+  })
+
+  it('a person can take a handoff back, finish a message themselves, and replying finishes it', async () => {
+    const { ann, bob, conv, msg } = await pair()
+    const agent = await agentFor(bob)
+    await bob.post(`/inbox/${msg}/handoff`, {})
+    await agent.tool('claim', { msg })
+    expect((await bob.post(`/inbox/${msg}/takeback`)).body.state).toBe('read')
+    expect((await agent.tool('history', { conv })).data.error).toBe('not_readable')
+    expect((await agent.tool('done', { msg })).ok).toBe(false)
+    expect((await bob.post(`/inbox/${msg}/takeback`)).status).toBe(409)
+    // Asking an agent leaves no trace for the other person.
+    expect((await events(ann, conv)).some((e) => e.body.kind === 'receipt' && e.body.state === 'handed_off')).toBe(false)
+
+    await bob.send(conv, 'I will look tonight.')
+    await eventually(async () => (await bob.get('/inbox')).body.length === 0, 'replying finishes what was waiting')
+
+    const next = await ann.send(conv, 'thanks')
+    await pending(bob)
+    expect((await bob.post(`/inbox/${next}/done`)).body.state).toBe('done')
+    expect((await bob.get('/inbox')).body).toEqual([])
   })
 
   it('I3: two devices cannot both claim a message', async () => {
@@ -202,6 +223,8 @@ describe('the human gate', () => {
     expect(await messages(ann, conv)).toHaveLength(1)
     expect((await agent.tool('draft_status', { draft: drafted.data.draft })).data.status).toBe('pending')
 
+    const second = await agent.tool('draft', { conv, text: 'never sent' })
+    expect((await bob.post(`/drafts/${second.data.draft}/reject`)).status).toBe(200)
     const list = (await bob.get('/drafts')).body
     expect(list[0]).toMatchObject({ id: drafted.data.draft, text: 'Looks fine to me.', device_name: 'bob-agent', status: 'pending' })
     const approved = await bob.post(`/drafts/${drafted.data.draft}/approve`, { text: 'Looks fine to me, with one change.' })
@@ -213,10 +236,11 @@ describe('the human gate', () => {
     // ann was named: the reply is addressed to her.
     expect((await pending(ann))[0]).toMatchObject({ from: 'bob', text: 'Looks fine to me, with one change.' })
 
-    const second = await agent.tool('draft', { conv, text: 'never sent' })
-    expect((await bob.post(`/drafts/${second.data.draft}/reject`)).status).toBe(200)
     expect((await agent.tool('draft_status', { draft: second.data.draft })).data.status).toBe('rejected')
     expect((await messages(ann, conv)).some((m) => m.text === 'never sent')).toBe(false)
+    // The approved reply answered the message: it is done, and the agent's access to the conversation ends.
+    expect((await bob.get('/inbox')).body).toEqual([])
+    expect((await agent.tool('draft', { conv, text: 'too late' })).data.error).toBe('not_readable')
     // Another device of the same person cannot see this device's drafts.
     const nosy = await agentFor(bob, { name: 'nosy' })
     expect((await nosy.tool('draft_status', { draft: drafted.data.draft })).data.error).toBe('not_found')

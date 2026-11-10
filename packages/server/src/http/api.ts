@@ -366,20 +366,24 @@ api.post('/join/:code/accept', anyHuman, async (c) => {
 
 api.get('/inbox', anyHuman, async (c) => c.json(await inbox(c).inbox(c.req.query('all') === '1')))
 
-const act = (action: 'read' | 'handoff' | 'done') => async (c: C) => {
+const act = (action: 'read' | 'handoff' | 'done' | 'take_back') => async (c: C) => {
   const msg = param(c, 'msg', isEventId)
   const mode = action === 'handoff' ? (await body(c, z.object({ mode: z.enum(['readonly', 'full']).default('readonly') }))).mode : 'readonly'
   const r = await inbox(c).humanAct(msg, action === 'handoff' ? { a: 'handoff', mode } : { a: action })
   if (!r.ok) return send(c, r)
-  // Two-person conversations show receipts; the conversation decides whether this one counts.
-  const state: ReceiptState = action === 'handoff' ? 'handed_off' : action
-  const id = r.value.conv
-  c.executionCtx.waitUntil(conv(c, id).exec(id, { t: 'receipt', id: newEventId(), principal: me(c), of: msg, state }).catch(() => undefined))
+  // Two-person conversations show receipts for read and done. Whether someone asked
+  // their agent is their own business and is not announced.
+  if (action === 'read' || action === 'done') {
+    const state: ReceiptState = action
+    const id = r.value.conv
+    c.executionCtx.waitUntil(conv(c, id).exec(id, { t: 'receipt', id: newEventId(), principal: me(c), of: msg, state }).catch(() => undefined))
+  }
   return c.json({ state: r.value.state })
 }
 api.post('/inbox/:msg/read', anyHuman, act('read'))
 api.post('/inbox/:msg/handoff', anyHuman, act('handoff'))
 api.post('/inbox/:msg/done', anyHuman, act('done'))
+api.post('/inbox/:msg/takeback', anyHuman, act('take_back'))
 
 // -- drafts ----------------------------------------------------------------------------
 
