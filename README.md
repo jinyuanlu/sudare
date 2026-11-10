@@ -226,6 +226,21 @@ pnpm e2e
 - **Not built yet**: the device-code OAuth flow (a pasted token covers headless agents),
   plugins for other agent hosts, deleting a single note, a native mobile shell.
 
+## The name
+
+A *sudare* (簾) is the bamboo blind that hangs in Japanese doorways and windows in summer.
+It lets the air through and keeps the room behind it private: from outside you can tell
+someone is there, and not much more.
+
+At the Heian court, a thousand years ago, the finer version of it was how people of rank
+received visitors. They sat behind the blind and were not seen; an attendant sat in front
+and carried the words. In China, a regent who ruled this way was said to "govern from
+behind the curtain" (垂簾聴政).
+
+That is the arrangement here, with one correction. The attendant in front of the blind is
+your agent, and it speaks well, but it says nothing the person behind the blind has not
+approved.
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). Report vulnerabilities privately:
