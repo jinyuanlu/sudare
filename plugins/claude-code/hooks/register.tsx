@@ -28,7 +28,7 @@ const HELP = [
   'Read and write here. Messages from others also show above your prompt.',
   'To: pick everyone or one person. ● means they are here now.',
   'Ask Claude (above the prompt) lets your agent draft a reply. Nothing is sent until you press Send.',
-  'Invite adds a person. New conversation starts another topic with people from this one.',
+  'Invite adds a person. New room starts another topic with people from this one.',
 ]
 
 /** Who the next message in the panel is addressed to; null means everyone in the conversation. */
@@ -44,7 +44,7 @@ const clip = (text: string, n: number): string => (text.length > n ? `${text.sli
 
 const draftKind = (target: unknown): string => {
   const kind = str((target as Json | undefined)?.kind)
-  return kind === 'conv' ? 'new conversation' : kind === 'note' ? 'note revision' : 'message'
+  return kind === 'conv' ? 'new room' : kind === 'note' ? 'note revision' : 'message'
 }
 
 /** Pulls the lists the band and pane show. One round trip each; the server is the source of truth. */
@@ -264,7 +264,7 @@ async function startRound($: Engine, seat: SudareSeat): Promise<void> {
   const r = await $.agent.spawn({
     subagentType: 'sudare:round',
     description: `Sudare round: ${clip(seat.goal, 40)}`,
-    prompt: `Take my seat in Sudare discussion round ${seat.round} (conversation "${seat.topic}", id ${seat.conv}). Goal: ${seat.goal}`,
+    prompt: `Take my seat in Sudare discussion round ${seat.round} (room "${seat.topic}", id ${seat.conv}). Goal: ${seat.goal}`,
   })
   await say($, r.deny ? `Could not start the round agent: ${r.deny}` : 'Your agent took its seat in the round.')
 }
@@ -298,7 +298,7 @@ export const register: Register = (on, options) => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'sudare',
-      description: 'Open Sudare: your conversations and messages',
+      description: 'Open Sudare: your rooms and messages',
       argumentHint: '(opens Sudare)',
     })
     if (server !== '') {
@@ -348,7 +348,7 @@ export const register: Register = (on, options) => {
     }
     if (verb === 'invite') {
       const here = await read($, current)
-      if (!here) return { text: 'Pick a conversation first: /sudare <topic prefix>' }
+      if (!here) return { text: 'Open a room first: /sudare <topic>' }
       const { refs, problem } = await contacts(c, handles)
       if (problem || refs.length === 0) return { text: problem ?? 'Usage: /sudare invite @handle' }
       const results = await Promise.all(refs.map((to) => c.api('POST', `/convs/${here}/invites`, { to })))
@@ -360,7 +360,7 @@ export const register: Register = (on, options) => {
     if (verb !== '') {
       const prefix = e.args.trim().toLowerCase()
       const hit = snap.convs.find((x) => x.topic.toLowerCase().startsWith(prefix))
-      if (!hit) return { text: `No conversation starts with "${e.args.trim()}".` }
+      if (!hit) return { text: `No room starts with "${e.args.trim()}".` }
       await openConv($, c, hit.id)
       const shown = await read($, timeline)
       return { text: `── ${hit.topic} ──\n${shown ? transcript(shown) : '(could not load)'}\n\nType "@handle message" to send, or /sudare panel.` }
@@ -370,14 +370,14 @@ export const register: Register = (on, options) => {
     void $.ui.open({ id: PANE, title: 'Sudare' })
     return {
       text: [
-        'Your conversations:',
+        'Your rooms:',
         ...(lines.length ? lines : ['  none yet: open an invitation link someone sent you']),
         '',
-        'The Sudare panel is open: read, write, invite and start conversations there.',
+        'The Sudare panel is open: read, write, invite and start rooms there.',
         'Shortcuts, if you prefer typing:',
-        '  @name your message      send to someone in the open conversation',
-        '  /sudare <topic>         switch conversation and show its messages',
-        '  /sudare new <topic> @name   start a conversation',
+        '  @name your message      send to someone in the open room',
+        '  /sudare <topic>         switch room and show its messages',
+        '  /sudare new <topic> @name   start a room',
         '  /sudare signout         forget the sign-in on this machine',
         '',
         `Signed in: ${isSignedIn() ? 'yes' : 'no'} · stays signed in across restarts: ${keepsSignIn() ? 'yes (7 days)' : 'no'}`,
@@ -525,7 +525,7 @@ export const register: Register = (on, options) => {
           </Box>
         )}
         {note && <Text dimColor>{note}</Text>}
-        {snap.convs.length === 0 && <Text dimColor>No conversations yet. Join one with an invitation link.</Text>}
+        {snap.convs.length === 0 && <Text dimColor>No rooms yet. Join one with an invitation link.</Text>}
         {shown && (
           <Box flexDirection="column">
             <Text>
@@ -560,7 +560,7 @@ export const register: Register = (on, options) => {
         )}
         {others.length > 0 && (
           <Box flexDirection="column">
-            <Text dimColor>Other conversations</Text>
+            <Text dimColor>Other rooms</Text>
             {others.map((x) => (
               <Button key={`conv-${x.id}`} plain onPress={() => openConv($, c, x.id)}>
                 {clip(x.topic, 40)}{' '}
@@ -587,7 +587,7 @@ export const register: Register = (on, options) => {
         ))}
         {shown && form.isOpen && (
           <Box flexDirection="column">
-            <Text bold>New conversation</Text>
+            <Text bold>New room</Text>
             {shown.others.length > 0 && (
               <Box gap={2} flexWrap="wrap">
                 <Text dimColor>With</Text>
@@ -603,7 +603,7 @@ export const register: Register = (on, options) => {
         )}
         <Box gap={2} flexWrap="wrap">
           {shown && <Button key="invite" label="Invite" onPress={() => inviteLink($, c, shown.conv, e.surface)} />}
-          {shown && !form.isOpen && <Button key="new" label="New conversation" onPress={() => update($, compose, () => ({ isOpen: true, people: shown.others.map((o) => o.handle) }))} />}
+          {shown && !form.isOpen && <Button key="new" label="New room" onPress={() => update($, compose, () => ({ isOpen: true, people: shown.others.map((o) => o.handle) }))} />}
           <Button key="web" label="Web app" onPress={() => c.open(c.base)} />
           <Button key="help" plain label="help" onPress={() => update($, helpOpen, (v) => !v)} />
           <Button key="refresh" plain label="refresh" onPress={() => refresh($, c)} />
