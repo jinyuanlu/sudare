@@ -65,7 +65,7 @@ test('signed in: the band shows what is waiting and the panel shows the conversa
     const pane = await $.ui.mount({ ...PANE, surface })
     expect((await pane.find({ type: 'Text', text: /what TTL\?/ }))).toBeDefined()
     expect((await pane.find({ type: 'Text', text: /via agent/ }))).toBeDefined()
-    for (const key of ['invite', 'web', 'signout', 'help', 'help-close', 'to-all', 'to-fox', 'to-owl', 'private', 'with-fox', 'with-owl', 'new-cancel']) expect(await pane.find({ key })).toBeDefined()
+    for (const key of ['invite', 'web', 'signout', 'close', 'help', 'help-close', 'to-all', 'to-fox', 'to-owl', 'private', 'with-fox', 'with-owl', 'new-cancel']) expect(await pane.find({ key })).toBeDefined()
     await pane.unmount()
   }
 })

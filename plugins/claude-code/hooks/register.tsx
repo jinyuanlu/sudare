@@ -521,7 +521,7 @@ export const register: Register = (on, options) => {
     const draft = snap.drafts[0]
     const invite = snap.invites[0]
     const seat = snap.seats.find((s) => !s.isSeated)
-    if (!item && !draft && !invite && !seat && !note) {
+    if (!item && !draft && !invite && !seat && (!note || note.startsWith('Invitation link'))) {
       const unread = snap.convs.reduce((n, x) => n + x.unread, 0)
       return (
         <Box gap={2}>
@@ -535,7 +535,7 @@ export const register: Register = (on, options) => {
     const where = (t: string) => (many ? ` in ${clip(t, 24)}` : '')
     return (
       <Box flexDirection="column">
-        {note && (
+        {note && !note.startsWith('Invitation link') && (
           <Box gap={2}>
             <Text dimColor>{note}</Text>
             <Button key="clear" label="Dismiss" onPress={() => update($, notice, () => null)} />
@@ -606,7 +606,12 @@ export const register: Register = (on, options) => {
             <Button key="help-close" label="OK" onPress={() => closeHelp($)} />
           </Box>
         )}
-        {note && note.startsWith('Invitation link') && <Text dimColor>{note}</Text>}
+        {note && note.startsWith('Invitation link') && (
+          <Box flexDirection="column">
+            <Text dimColor>{note}</Text>
+            <Button key="clear-link" label="OK" onPress={() => update($, notice, () => null)} />
+          </Box>
+        )}
         {snap.convs.length === 0 && <Text dimColor>No rooms yet. Join one with an invitation link.</Text>}
         {shown && (
           <Box flexDirection="column">
@@ -694,6 +699,7 @@ export const register: Register = (on, options) => {
           <Button key="web" label="Web" onPress={() => c.open(c.base)} />
           <Button key="help" label="Help" onPress={() => update($, helpOpen, (v) => !v)} />
           <Button key="signout" label="Sign out" onPress={async () => (await c.signOut(), refresh($, c))} />
+          <Button key="close" label="Close" role="dismiss" onPress={() => $.ui.close({ id: PANE })} />
         </Box>
       </Box>
     )
