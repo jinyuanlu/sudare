@@ -3,6 +3,9 @@
 // a pane, forwards the person's clicks with the in-memory human session, and
 // starts the tool-restricted sub-agent for discussion rounds.
 
+// House rule for everything drawn here: every button is a bracketed [ Button ]. Never use the
+// `plain` prop; show a selected choice with variant="primary" instead.
+
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
@@ -485,7 +488,7 @@ export const register: Register = (on, options) => {
         <Box flexDirection="column">
           <Box gap={2}>
             <Text>Sudare · confirm in your browser. Code <Text bold>{pending.code}</Text></Text>
-            <Button key="cancel-signin" plain label="cancel" onPress={() => cancelSignIn($)} />
+            <Button key="cancel-signin" label="Cancel" onPress={() => cancelSignIn($)} />
           </Box>
           <Text dimColor>{pending.url}</Text>
         </Box>
@@ -501,7 +504,7 @@ export const register: Register = (on, options) => {
         ) :
         <Box gap={2}>
           <Text dimColor>Sudare · {isFirst ? 'step 2 of 2: ' : ''}sign in for</Text>
-          <Button key="signin" label="this session" {...(!isKept ? { variant: 'primary' as const } : {})} onPress={() => signInFor($, server, keep, false, allowHuman)} />
+          <Button key="signin" label="This session" {...(!isKept ? { variant: 'primary' as const } : {})} onPress={() => signInFor($, server, keep, false, allowHuman)} />
           {allowHuman && <Button key="signin-keep" label="7 days on this computer" {...(isKept ? { variant: 'primary' as const } : {})} onPress={() => signInFor($, server, keep, true, allowHuman)} />}
           {note && <Text dimColor>{note}</Text>}
         </Box>
@@ -528,7 +531,7 @@ export const register: Register = (on, options) => {
         {note && (
           <Box gap={2}>
             <Text dimColor>{note}</Text>
-            <Button key="clear" plain label="dismiss" onPress={() => update($, notice, () => null)} />
+            <Button key="clear" label="Dismiss" onPress={() => update($, notice, () => null)} />
           </Box>
         )}
         {item && (
@@ -536,7 +539,7 @@ export const register: Register = (on, options) => {
             <Text><Text bold>{item.from}</Text><Text dimColor>{where(item.topic)}</Text>  {clip(item.text, 80)}</Text>
             <Button key="reply" label="Reply" onPress={() => replyTo($, c, item)} />
             <Button key="agent" label="Ask Claude" onPress={() => handOff($, c, item, 'readonly')} />
-            <Button key="item-done" plain label="done" onPress={() => post($, c, `/inbox/${item.msg}/done`, {}, 'Done.')} />
+            <Button key="item-done" label="Done" onPress={() => post($, c, `/inbox/${item.msg}/done`, {}, 'Done.')} />
           </Box>
         )}
         {draft && (
@@ -544,14 +547,14 @@ export const register: Register = (on, options) => {
             <Text><Text dimColor>Claude wrote{draft.topic ? where(draft.topic) : ''}:</Text>  {clip(draft.text, 80)}</Text>
             <Button key="approve" variant="primary" label={draft.status === 'approving' ? 'Retry' : 'Send'} onPress={() => post($, c, `/drafts/${draft.id}/approve`, {}, 'Sent.')} />
             <Button key="edit" label="Edit" onPress={() => $.ui.open({ id: PANE, title: 'Sudare' })} />
-            <Button key="reject" plain label="discard" onPress={() => post($, c, `/drafts/${draft.id}/reject`, {}, 'Discarded.')} />
+            <Button key="reject" label="Discard" onPress={() => post($, c, `/drafts/${draft.id}/reject`, {}, 'Discarded.')} />
           </Box>
         )}
         {invite && (
           <Box gap={2}>
             <Text><Text bold>{invite.by}</Text> invites you to <Text bold>{clip(invite.topic, 40)}</Text></Text>
             <Button key="join" label="Join" onPress={() => post($, c, `/invites/${invite.id}/accept`, {}, `Joined "${invite.topic}".`)} />
-            <Button key="decline" plain label="decline" onPress={() => post($, c, `/invites/${invite.id}/decline`, {}, 'Declined.')} />
+            <Button key="decline" label="Decline" onPress={() => post($, c, `/invites/${invite.id}/decline`, {}, 'Declined.')} />
           </Box>
         )}
         {seat && (
@@ -579,7 +582,7 @@ export const register: Register = (on, options) => {
           <Text>Sign in to read and write here.</Text>
           <Box gap={2}>
             <Text dimColor>Sign in for</Text>
-            <Button key="signin" label="this session" onPress={() => signInFor($, server, keep, false, allowHuman)} />
+            <Button key="signin" label="This session" onPress={() => signInFor($, server, keep, false, allowHuman)} />
             {allowHuman && <Button key="signin-keep" label="7 days on this computer" onPress={() => signInFor($, server, keep, true, allowHuman)} />}
           </Box>
           <Button key="web" label="Open the web app instead" onPress={() => c.open(c.base)} />
@@ -593,7 +596,7 @@ export const register: Register = (on, options) => {
         {isHelp && (
           <Box flexDirection="column">
             {HELP.map((line) => <Text dimColor>· {line}</Text>)}
-            <Button key="help-close" plain label="ok" onPress={() => closeHelp($)} />
+            <Button key="help-close" label="OK" onPress={() => closeHelp($)} />
           </Box>
         )}
         {note && note.startsWith('Invitation link') && <Text dimColor>{note}</Text>}
@@ -618,11 +621,11 @@ export const register: Register = (on, options) => {
         {shown && shown.others.length > 1 && (
           <Box gap={2} flexWrap="wrap">
             <Text dimColor>To</Text>
-            <Button key="to-all" {...(to !== null ? { plain: true as const } : {})} label="everyone" onPress={() => update($, target, () => null)} />
+            <Button key="to-all" {...(to === null ? { variant: 'primary' as const } : {})} label="Everyone" onPress={() => update($, target, () => null)} />
             {shown.others.map((o) => (
-              <Button key={`to-${o.handle}`} {...(to !== o.handle ? { plain: true as const } : {})} label={`${o.isHere ? '● ' : '○ '}${o.handle}`} onPress={() => update($, target, () => o.handle)} />
+              <Button key={`to-${o.handle}`} {...(to === o.handle ? { variant: 'primary' as const } : {})} label={`${o.isHere ? '● ' : '○ '}${o.handle}`} onPress={() => update($, target, () => o.handle)} />
             ))}
-            {picked && <Button key="private" plain label="private chat" onPress={() => openPrivate($, c, shown.conv, picked)} />}
+            {picked && <Button key="private" label="Private chat" onPress={() => openPrivate($, c, shown.conv, picked)} />}
           </Box>
         )}
         {shown && (
@@ -634,10 +637,7 @@ export const register: Register = (on, options) => {
           <Box flexDirection="column">
             <Text dimColor>Other rooms</Text>
             {others.map((x) => (
-              <Button key={`conv-${x.id}`} plain onPress={() => openConv($, c, x.id)}>
-                {clip(x.topic, 40)}{' '}
-                <Text dimColor>{x.unread ? `${x.unread} new` : ''}</Text>
-              </Button>
+              <Button key={`conv-${x.id}`} label={`${clip(x.topic, 40)}${x.unread ? ` · ${x.unread} new` : ''}`} onPress={() => openConv($, c, x.id)} />
             ))}
           </Box>
         )}
@@ -646,7 +646,7 @@ export const register: Register = (on, options) => {
           <Box key={`draft-${d.id}`} flexDirection="column">
             <Text dimColor>{d.device} · {d.kind}{d.topic ? ` · ${clip(d.topic, 30)}` : ''}</Text>
             <Input key={`edit-${d.id}`} value={d.text} rows={3} submitLabel="Send" onSubmit={(text) => void post($, c, `/drafts/${d.id}/approve`, text === d.text ? {} : { text }, 'Sent.')} />
-            <Button key={`reject-${d.id}`} plain label="discard" onPress={() => post($, c, `/drafts/${d.id}/reject`, {}, 'Discarded.')} />
+            <Button key={`reject-${d.id}`} label="Discard" onPress={() => post($, c, `/drafts/${d.id}/reject`, {}, 'Discarded.')} />
           </Box>
         ))}
         {rounds.length > 0 && <Text bold>Agent discussions you are not part of yet</Text>}
@@ -664,21 +664,21 @@ export const register: Register = (on, options) => {
               <Box gap={2} flexWrap="wrap">
                 <Text dimColor>With</Text>
                 {shown.others.map((o) => (
-                  <Button key={`with-${o.handle}`} plain label={`${form.people.includes(o.handle) ? '☑' : '☐'} ${o.handle}`}
+                  <Button key={`with-${o.handle}`} label={`${form.people.includes(o.handle) ? '☑' : '☐'} ${o.handle}`}
                     onPress={() => update($, compose, (f) => ({ ...f, people: f.people.includes(o.handle) ? f.people.filter((h) => h !== o.handle) : [...f.people, o.handle] }))} />
                 ))}
               </Box>
             )}
             <Input key="new-topic" placeholder="What is it about?" submitLabel="Create" onSubmit={(topic) => void createFrom($, c, shown, form.people, topic)} />
-            <Button key="new-cancel" plain label="cancel" onPress={() => update($, compose, () => ({ isOpen: false, people: [] }))} />
+            <Button key="new-cancel" label="Cancel" onPress={() => update($, compose, () => ({ isOpen: false, people: [] }))} />
           </Box>
         )}
         <Box gap={2} flexWrap="wrap">
           {shown && shown.canInvite && <Button key="invite" label="Invite" onPress={() => inviteLink($, c, shown.conv, e.surface)} />}
-          {shown && !shown.isPrivate && !form.isOpen && <Button key="new" label="New room" onPress={() => update($, compose, () => ({ isOpen: true, people: shown.others.map((o) => o.handle) }))} />}
-          <Button key="web" plain label="web" onPress={() => c.open(c.base)} />
-          <Button key="help" plain label="help" onPress={() => update($, helpOpen, (v) => !v)} />
-          <Button key="signout" plain label="sign out" onPress={async () => (await c.signOut(), refresh($, c))} />
+          {shown && !form.isOpen && <Button key="new" label="New room" onPress={() => update($, compose, () => ({ isOpen: true, people: shown.others.map((o) => o.handle) }))} />}
+          <Button key="web" label="Web" onPress={() => c.open(c.base)} />
+          <Button key="help" label="Help" onPress={() => update($, helpOpen, (v) => !v)} />
+          <Button key="signout" label="Sign out" onPress={async () => (await c.signOut(), refresh($, c))} />
         </Box>
       </Box>
     )

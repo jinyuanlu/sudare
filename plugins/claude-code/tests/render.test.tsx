@@ -70,12 +70,13 @@ test('signed in: the band shows what is waiting and the panel shows the conversa
   }
 })
 
-test('a private chat offers no Invite, no New room and no To row', OPTIONS, async ($, on) => {
+test('a private chat offers New room, but no Invite and no To row', OPTIONS, async ($, on) => {
   const priv = { ...(STATE.timeline as object), topic: 'fox', isPrivate: true, canInvite: false, others: [{ handle: 'fox', alias: 'a1', isHere: false }] }
   on('state.get', (_, e) => ({ value: { value: e.key === 'timeline' ? priv : e.key === 'compose' ? { isOpen: false, people: [] } : e.key === 'target' ? null : STATE[e.key], version: 1 } }))
   for (const surface of SURFACES) {
     const pane = await $.ui.mount({ ...PANE, surface })
-    for (const key of ['invite', 'new', 'to-all', 'to-fox']) expect(await pane.find({ key })).toBeUndefined()
+    for (const key of ['invite', 'to-all', 'to-fox']) expect(await pane.find({ key })).toBeUndefined()
+    expect(await pane.find({ key: 'new' })).toBeDefined()
     expect(await pane.find({ type: 'Text', text: /away/ })).toBeDefined()
     await pane.unmount()
   }
