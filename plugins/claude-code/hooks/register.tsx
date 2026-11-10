@@ -104,7 +104,7 @@ async function refresh($: Engine, c: Client, isSeen = false): Promise<void> {
   const shown = here && isSignedIn() ? await loadTimeline(c, here, isSeen).catch(() => null) : null
   await update($, timeline, () => shown)
   const waiting = next ? next.inbox.filter((i) => i.state === 'unread').length + next.drafts.length + next.invites.length : 0
-  $.ui.status(!isSignedIn() ? undefined : waiting > 0 ? `簾 ${waiting} waiting` : '簾')
+  $.ui.status(isSignedIn() && waiting > 0 ? `Sudare: ${waiting} waiting` : undefined)
 }
 
 /** Poll the person's inbox log; only refetch the lists when it moved. */
@@ -418,7 +418,7 @@ export const register: Register = (on, options) => {
     if (pending) {
       return (
         <Box flexDirection="column">
-          <Text>簾 Sign in from your browser. Code: <Text bold>{pending.code}</Text></Text>
+          <Text>Sudare · sign in from your browser. Code: <Text bold>{pending.code}</Text></Text>
           <Text dimColor>{pending.url}</Text>
         </Box>
       )
@@ -426,7 +426,7 @@ export const register: Register = (on, options) => {
     if (!isIn) {
       return (
         <Box gap={2}>
-          <Text dimColor>簾 Sudare · sign in for</Text>
+          <Text dimColor>Sudare · sign in for</Text>
           <Button key="signin" label="this session" {...(!isKept ? { variant: 'primary' as const } : {})} onPress={() => signInFor($, server, keep, false, allowHuman)} />
           {allowHuman && <Button key="signin-keep" label="7 days on this computer" {...(isKept ? { variant: 'primary' as const } : {})} onPress={() => signInFor($, server, keep, true, allowHuman)} />}
           {note && <Text dimColor>{note}</Text>}
@@ -441,8 +441,8 @@ export const register: Register = (on, options) => {
       const unread = snap.convs.reduce((n, x) => n + x.unread, 0)
       return (
         <Box>
-          <Text dimColor>簾 {unread > 0 ? `${unread} unread ` : shown && shown.others.length === 0 ? 'nobody else here yet ' : ''}</Text>
-          <Button key="open" plain label="Open Sudare" onPress={() => $.ui.open({ id: PANE, title: 'Sudare' })} />
+          <Text dimColor>Sudare{unread > 0 ? ` · ${unread} unread` : shown && shown.others.length === 0 ? ' · nobody else here yet' : ''}</Text>
+          <Button key="open" plain label="open" onPress={() => $.ui.open({ id: PANE, title: 'Sudare' })} />
         </Box>
       )
     }
@@ -453,13 +453,13 @@ export const register: Register = (on, options) => {
       <Box flexDirection="column">
         {note && (
           <Box gap={2}>
-            <Text dimColor>簾 {note}</Text>
+            <Text dimColor>{note}</Text>
             <Button key="clear" plain label="dismiss" onPress={() => update($, notice, () => null)} />
           </Box>
         )}
         {item && (
           <Box gap={2}>
-            <Text>簾 <Text bold>{item.from}</Text><Text dimColor>{where(item.topic)}</Text>  {clip(item.text, 80)}</Text>
+            <Text><Text bold>{item.from}</Text><Text dimColor>{where(item.topic)}</Text>  {clip(item.text, 80)}</Text>
             <Button key="reply" label="Reply" onPress={async () => {
               await update($, current, () => item.conv)
               await $.prompt.fill({ text: `@${item.from} ` })
@@ -469,7 +469,7 @@ export const register: Register = (on, options) => {
         )}
         {draft && (
           <Box gap={2}>
-            <Text>簾 <Text dimColor>Claude wrote{draft.topic ? where(draft.topic) : ''}:</Text>  {clip(draft.text, 80)}</Text>
+            <Text><Text dimColor>Claude wrote{draft.topic ? where(draft.topic) : ''}:</Text>  {clip(draft.text, 80)}</Text>
             <Button key="approve" variant="primary" label={draft.status === 'approving' ? 'Retry' : 'Send'} onPress={() => post($, c, `/drafts/${draft.id}/approve`, {}, 'Sent.')} />
             <Button key="edit" label="Edit" onPress={() => $.ui.open({ id: PANE, title: 'Sudare' })} />
             <Button key="reject" plain label="discard" onPress={() => post($, c, `/drafts/${draft.id}/reject`, {}, 'Discarded.')} />
@@ -477,14 +477,14 @@ export const register: Register = (on, options) => {
         )}
         {invite && (
           <Box gap={2}>
-            <Text>簾 <Text bold>{invite.by}</Text> invites you to <Text bold>{clip(invite.topic, 40)}</Text></Text>
+            <Text><Text bold>{invite.by}</Text> invites you to <Text bold>{clip(invite.topic, 40)}</Text></Text>
             <Button key="join" label="Join" onPress={() => post($, c, `/invites/${invite.id}/accept`, {}, `Joined "${invite.topic}".`)} />
             <Button key="decline" plain label="decline" onPress={() => post($, c, `/invites/${invite.id}/decline`, {}, 'Declined.')} />
           </Box>
         )}
         {seat && (
           <Box gap={2}>
-            <Text>簾 <Text dimColor>Discussion{where(seat.topic)}:</Text>  {clip(seat.goal, 60)}</Text>
+            <Text><Text dimColor>Discussion{where(seat.topic)}:</Text>  {clip(seat.goal, 60)}</Text>
             <Button key="seat" label="Let Claude join" onPress={() => startRound($, seat)} />
           </Box>
         )}
