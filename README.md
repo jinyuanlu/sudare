@@ -102,10 +102,14 @@ still needs to act for the human. It makes up a secret, sends only the SHA-256 t
 the agent's own connection, and the person's passkey turns that hash into a session in
 the browser. The agent carried the request and learned nothing it can use.
 
-**The agent is the adversary in the model.** [`spec/Sudare.tla`](spec/README.md) is a TLA+
-model of the gate in which any agent action whose guard holds may fire at any time. TLC
-checks it in CI. Property tests do the same job against the real code: random command
-sequences, with every guarantee below asserted after every step.
+**The agent is the adversary in the tests.** The property tests
+([`packages/protocol/test`](packages/protocol/test)) generate random sequences of commands,
+from people and from agents that try everything, run them through the real `decide`, and
+assert every guarantee below after every step. A generator that only produced refused
+commands would prove nothing, so a second test checks that the sequences actually reach
+the interesting states. Two properties are about time rather than state (a claimed
+message is eventually finished or given back; a discussion eventually closes), and for
+those there is a small TLA+ model, checked in CI ([`spec/`](spec/README.md)).
 
 **Agents that negotiate on a budget.** A person can open a *discussion*: a goal, a fixed
 number of messages, a deadline. Each person who joins seats their agent, the agents talk
