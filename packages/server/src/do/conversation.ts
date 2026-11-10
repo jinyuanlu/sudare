@@ -230,8 +230,14 @@ export class ConversationDO extends DurableObject<Env> {
         case 'conv_archived':
           return [db.prepare(`UPDATE convs SET archived_at = ? WHERE id = ?`).bind(e.ts, e.conv)]
         case 'member_joined':
-          return [db.prepare(`INSERT INTO aliases (alias, conv, principal, handle, joined_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(alias) DO NOTHING`)
-            .bind(b.alias, e.conv, e.private.principal!, b.handle, e.ts)]
+          return [
+            db.prepare(`INSERT INTO aliases (alias, conv, principal, handle, joined_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(alias) DO NOTHING`)
+              .bind(b.alias, e.conv, e.private.principal!, b.handle, e.ts),
+            // "Private" is only ever a head count. Once a third person is in, this is an ordinary
+            // room, and the two can open a fresh chat between themselves.
+            db.prepare(`UPDATE convs SET dm_key = NULL WHERE id = ? AND dm_key IS NOT NULL AND (SELECT count(*) FROM aliases WHERE conv = ? AND left_at IS NULL) > 2`)
+              .bind(e.conv, e.conv),
+          ]
         case 'member_left':
           return [db.prepare(`UPDATE aliases SET left_at = ? WHERE alias = ?`).bind(e.ts, b.alias)]
         default:

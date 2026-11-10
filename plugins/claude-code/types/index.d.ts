@@ -18,7 +18,7 @@ export type SudareLine = { id: string; from: string; text: string; via: string; 
 
 /** The last messages of the conversation the person is looking at. */
 export type SudarePerson = { handle: string; alias: string; isHere: boolean }
-export type SudareTimeline = { conv: string; topic: string; me: string; others: SudarePerson[]; lines: SudareLine[]; isPrivate: boolean; canInvite: boolean }
+export type SudareTimeline = { conv: string; topic: string; me: string; others: SudarePerson[]; lines: SudareLine[]; canInvite: boolean }
 
 /** A pending "confirm in your browser" request: the pairing code the person compares, and where to confirm. */
 export type SudareLink = { code: string; url: string }

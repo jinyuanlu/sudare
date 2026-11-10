@@ -15,7 +15,7 @@ const NavItem = ({ href, label, n, active }: { href: string; label: string; n?: 
 const ConvItem = ({ c, active }: { c: ConvSummary; active: boolean }) => (
   <li>
     <Link href={`/c/${c.id}`} class={`conv-item${c.archived ? ' dim' : ''}`} data-testid="conv-item" aria-current={active ? 'page' : undefined}>
-      <span class="conv-topic">{c.dm_with ? t('conv.privateWith', { who: c.dm_with }) : c.topic}</span>
+      <span class="conv-topic">{c.dm_with ?? c.topic}</span>
       <span class="conv-meta">
         {c.round ? <span class="tag round-tag">{t('home.round')}</span> : null}
         {c.archived ? <span class="tag">{t('home.archived')}</span> : null}

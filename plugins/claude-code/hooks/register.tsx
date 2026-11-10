@@ -59,7 +59,7 @@ const load = async (c: Client): Promise<SudareSnapshot | null> => {
   )
   if (![convs, inbox, drafts, invites, seats].every((r) => r?.ok)) return null
   return {
-    convs: list(convs!.body).map((x): SudareConv => ({ id: str(x.id), topic: str(x.dm_with) ? `${str(x.dm_with)} · private` : str(x.topic), unread: num(x.unread), pending: num(x.pending), round: str(x.round) || null })),
+    convs: list(convs!.body).map((x): SudareConv => ({ id: str(x.id), topic: str(x.dm_with) || str(x.topic), unread: num(x.unread), pending: num(x.pending), round: str(x.round) || null })),
     inbox: list(inbox!.body).map((x): SudareItem => ({ msg: str(x.msg), conv: str(x.conv), topic: str(x.topic), from: str(x.from), text: str(x.text), state: str(x.state) })),
     drafts: list(drafts!.body).map((x): SudareDraft => ({ id: str(x.id), topic: str(x.topic) || null, kind: draftKind(x.target), text: str(x.text), device: str(x.device_name), status: str(x.status) })),
     invites: list(invites!.body).map((x): SudareInvite => ({ id: str(x.id), topic: str(x.topic), by: str(x.by), members: num(x.members) })),
@@ -115,8 +115,7 @@ const loadTimeline = async (c: Client, conv: string, isSeen: boolean): Promise<S
   // Only a person looking at it counts as reading; a background refresh does not.
   if (last && isSeen) await c.api('POST', `/convs/${conv}/read`, { seq: num(last.seq) })
   const others = members.filter((m) => m.me !== true && m.left !== true).map((m): SudarePerson => ({ handle: str(m.handle), alias: str(m.alias), isHere: m.active === true }))
-  const isPrivate = str(v.dm_with) !== ''
-  return { conv, topic: isPrivate ? `${str(v.dm_with)}` : str(v.topic), me, others, lines, isPrivate, canInvite: v.can_invite === true }
+  return { conv, topic: str(v.dm_with) || str(v.topic), me, others, lines, canInvite: v.can_invite === true }
 }
 
 // The position in the person's inbox log this session has seen. Module state: a reload starts over, which only costs one refetch.
@@ -300,12 +299,6 @@ async function openPrivate($: Engine, c: Client, conv: string, person: SudarePer
   if (!r.ok || made === '') return void (await say($, `Could not open a private chat: ${why(r)}.`))
   await update($, target, () => null)
   await openConv($, c, made)
-}
-
-/** Invite is always where people look for it. A private chat stays 1:1, so there it starts a room with that person. */
-async function inviteFromPrivate($: Engine, from: SudareTimeline): Promise<void> {
-  await update($, compose, () => ({ isOpen: true, people: from.others.map((o) => o.handle) }))
-  await say($, 'A private chat is just you two. Name a new room below, then invite people into it.')
 }
 
 /** A one-time invitation link for this conversation, copied to the clipboard. */
@@ -605,7 +598,7 @@ export const register: Register = (on, options) => {
             <Button key="help-close" label="OK" onPress={() => closeHelp($)} />
           </Box>
         )}
-        {note && (note.startsWith('Invitation link') || note.startsWith('A private chat')) && <Text dimColor>{note}</Text>}
+        {note && note.startsWith('Invitation link') && <Text dimColor>{note}</Text>}
         {snap.convs.length === 0 && <Text dimColor>No rooms yet. Join one with an invitation link.</Text>}
         {shown && (
           <Box flexDirection="column">
@@ -681,7 +674,6 @@ export const register: Register = (on, options) => {
         )}
         <Box gap={2} flexWrap="wrap">
           {shown && shown.canInvite && <Button key="invite" label="Invite" onPress={() => inviteLink($, c, shown.conv, e.surface)} />}
-          {shown && shown.isPrivate && !form.isOpen && <Button key="invite" label="Invite" onPress={() => inviteFromPrivate($, shown)} />}
           {shown && !form.isOpen && <Button key="new" label="New room" onPress={() => update($, compose, () => ({ isOpen: true, people: shown.others.map((o) => o.handle) }))} />}
           <Button key="web" label="Web" onPress={() => c.open(c.base)} />
           <Button key="help" label="Help" onPress={() => update($, helpOpen, (v) => !v)} />

@@ -75,10 +75,10 @@ const Menu = ({ view, openRound, onPanel, onError }: MenuProps) => {
       <div class="menu-items" role="menu">
         {item(t('conv.members'), () => onPanel('members'))}
         {view.can_invite ? item(t('conv.invite'), () => onPanel('members')) : null}
-        {view.dm_with ? null : item(t('conv.newTopic'), () => navigate(`/new?parent=${view.id}`))}
+        {item(t('conv.newTopic'), () => navigate(`/new?parent=${view.id}`))}
         {item(t('notes.title'), () => navigate(`/c/${view.id}/notes`))}
         {active && !openRound ? item(t('round.openAction'), () => onPanel('round')) : null}
-        {active && !view.dm_with ? item(t('conv.rename'), () => onPanel('rename')) : null}
+        {active ? item(t('conv.rename'), () => onPanel('rename')) : null}
         {active && me?.creator ? item(t('conv.retention'), () => onPanel('retention')) : null}
         {!me?.left ? item(t('conv.leave'), confirmed(t('conv.leaveConfirm'), () => api.leave(view.id), () => navigate('/'))) : null}
         {active && (me?.creator || creatorGone) ? item(t('conv.archive'), confirmed(t('conv.archiveConfirm'), () => api.archive(view.id), () => undefined)) : null}
@@ -133,7 +133,7 @@ export const ConvScreen = ({ id, at }: { id: ConvId; at: number | null }) => {
 
   return (
     <Page
-      wide title={view.dm_with ? t('conv.privateWith', { who: view.dm_with }) : view.topic}
+      wide title={view.dm_with ?? view.topic}
       sub={<button type="button" class="link" onClick={() => setPanel('members')}>{membersText(active.length)} · {t('conv.hereNow', { n: active.filter((m) => m.active).length })}{view.archived ? ` · ${t('home.archived')}` : ''}</button>}
       actions={<>{view.can_invite && !view.archived ? <button type="button" onClick={() => setPanel('members')}>{t('conv.invite')}</button> : null}<Link class="button" href={`/c/${id}/notes`}>{t('notes.title')}</Link><Menu view={view} openRound={round !== null} onPanel={setPanel} onError={setFailure} /></>}
     >

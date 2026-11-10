@@ -278,8 +278,8 @@ api.get('/convs/:id', anyHuman, async (c) => {
   if (!view.ok) return send(c, view)
   const isPrivate = await directory(c.env).isPrivateChat(id)
   // "Here now": the person's client was connected or polling within the last two minutes.
-  // A private chat stays between its two people: nobody is invited into it.
-  return c.json({ ...view.value, can_invite: view.value.can_invite && !isPrivate, dm_with: isPrivate ? (priv.get(id) ?? '') : null, members: view.value.members.map((m) => ({ ...m, active: m.me || (!m.left && active.has(m.alias)) })) })
+  // A room two people opened with each other is shown under the other person's name while it is still just them.
+  return c.json({ ...view.value, dm_with: isPrivate ? (priv.get(id) ?? null) : null, members: view.value.members.map((m) => ({ ...m, active: m.me || (!m.left && active.has(m.alias)) })) })
 })
 
 api.patch('/convs/:id', anyHuman, async (c) => {
@@ -298,7 +298,6 @@ api.patch('/convs/:id', anyHuman, async (c) => {
 
 api.post('/convs/:id/invites', anyHuman, async (c) => {
   const id = param(c, 'id', isConvId)
-  if (await directory(c.env).isPrivateChat(id)) return fail('invite_forbidden')
   const input = await body(c, z.union([z.object({ to: zAliasRef }), z.object({ link: z.literal(true) })]))
   return 'to' in input
     ? send(c, await inviteMember(c.env, me(c), id, input.to as AliasRef).then((r) => (r.ok ? ok({ invite: r.value }) : r)), 201)

@@ -100,12 +100,18 @@ describe('identity and joining', () => {
     const first = await ann.post('/convs', { topic: 'ann · bob', members: [bobRef], dm: true })
     const second = await bob.post('/convs', { topic: 'again', members: [{ conv, alias: await aliasOf(bob, conv, 'ann') }], dm: true })
     expect(second.body).toMatchObject({ conv: first.body.conv, existing: true })
-    // Each sees it as a private chat with the other, and nobody can be invited into it.
-    await eventually(async () => (await ann.get(`/convs/${first.body.conv}`)).body.dm_with === 'bob', 'private chat is named after the other person')
-    expect((await bob.get(`/convs/${first.body.conv}`)).body).toMatchObject({ dm_with: 'ann', can_invite: false })
+    // While it is just the two of them, each sees it under the other's name. It is an ordinary room otherwise.
+    await eventually(async () => (await ann.get(`/convs/${first.body.conv}`)).body.dm_with === 'bob', 'named after the other person')
+    expect((await bob.get(`/convs/${first.body.conv}`)).body).toMatchObject({ dm_with: 'ann', can_invite: true })
     expect((await bob.convs()).find((x) => x.id === first.body.conv)).toMatchObject({ dm_with: 'ann' })
-    expect((await ann.post(`/convs/${first.body.conv}/invites`, { link: true })).body.error).toBe('invite_forbidden')
     expect((await ann.get(`/convs/${conv}`)).body.dm_with).toBeNull()
+    // "Private" is a head count: a third person makes it a plain room, and the two can open a new chat.
+    const link = (await ann.post(`/convs/${first.body.conv}/invites`, { link: true })).body.url as string
+    await joinByLink('cy', link)
+    await eventually(async () => (await ann.get(`/convs/${first.body.conv}`)).body.dm_with === null, 'no longer shown as a two-person chat')
+    const again = await ann.post('/convs', { topic: 'ann · bob', members: [bobRef], dm: true })
+    expect(again.body.existing).toBe(false)
+    expect(again.body.conv).not.toBe(first.body.conv)
 
     const solo = (await ann.post('/convs', { topic: 'Solo' })).body.conv as ConvId
     const invited = await ann.post(`/convs/${solo}/invites`, { to: bobRef })

@@ -29,7 +29,7 @@ const STATE: Record<string, unknown> = {
   compose: { isOpen: true, people: ['fox'] },
   isHelpOpen: true,
   timeline: {
-    conv: 'c1', topic: 'Cache plan', me: 'ann', isPrivate: false, canInvite: true, others: [{ handle: 'fox', alias: 'a1', isHere: true }, { handle: 'owl', alias: 'a2', isHere: false }],
+    conv: 'c1', topic: 'Cache plan', me: 'ann', canInvite: true, others: [{ handle: 'fox', alias: 'a1', isHere: true }, { handle: 'owl', alias: 'a2', isHere: false }],
     lines: [
       { id: 'e1', from: 'fox', text: 'what TTL?', via: 'human', isMine: false },
       { id: 'e2', from: 'ann', text: 'Five minutes.', via: 'delegate', isMine: true },
@@ -70,9 +70,9 @@ test('signed in: the band shows what is waiting and the panel shows the conversa
   }
 })
 
-test('a private chat still shows Invite and New room, and no To row', OPTIONS, async ($, on) => {
-  const priv = { ...(STATE.timeline as object), topic: 'fox', isPrivate: true, canInvite: false, others: [{ handle: 'fox', alias: 'a1', isHere: false }] }
-  on('state.get', (_, e) => ({ value: { value: e.key === 'timeline' ? priv : e.key === 'compose' ? { isOpen: false, people: [] } : e.key === 'target' ? null : STATE[e.key], version: 1 } }))
+test('a room with one other person has Invite and New room like any room, and no To row', OPTIONS, async ($, on) => {
+  const two = { ...(STATE.timeline as object), topic: 'fox', canInvite: true, others: [{ handle: 'fox', alias: 'a1', isHere: false }] }
+  on('state.get', (_, e) => ({ value: { value: e.key === 'timeline' ? two : e.key === 'compose' ? { isOpen: false, people: [] } : e.key === 'target' ? null : STATE[e.key], version: 1 } }))
   for (const surface of SURFACES) {
     const pane = await $.ui.mount({ ...PANE, surface })
     for (const key of ['to-all', 'to-fox']) expect(await pane.find({ key })).toBeUndefined()
