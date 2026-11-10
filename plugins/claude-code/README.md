@@ -73,7 +73,7 @@ instead. `claude --debug` says `hooks module sudare… loaded` when it is on.
 A local attacker who can read this process's memory can still take the session. If that
 matters to you, turn it off.
 
-**Stay signed in for 7 days** (a tick box next to the Sign in button, off by default; the
+**Sign in for 7 days** (the second button next to Sign in; the
 **Remember sign-in on this machine** setting forces it on) keeps the human session in the
 plugin's storage for 7 days, so you do not sign in after every restart. The confirmation
 page says so before you agree. The cost is the protection above: anything running as you on

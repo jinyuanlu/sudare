@@ -7,7 +7,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { SudareConv, SudareDraft, SudareInvite, SudareItem, SudareLine, SudareLink, SudarePerson, SudareSeat, SudareSnapshot, SudareTimeline } from '../types'
-import { isSignedIn, makeClient, type Client, type Json } from './client'
+import { isSignedIn, keepsSignIn, makeClient, type Client, type Json } from './client'
 import { enterReadonly, isOwnCall, isPluginOnlyTool, leaveReadonly, refusal } from './guard'
 
 type Engine = EngineInterface
@@ -219,6 +219,12 @@ async function setKeep($: Engine, c: Client, on: boolean): Promise<void> {
   await update($, kept, () => on)
 }
 
+/** One press: choose to stay signed in on this machine, and sign in. */
+async function signInKept($: Engine, server: string, always: boolean): Promise<void> {
+  await setKeep($, makeClient($, server, always), true)
+  await say($, await signIn($, makeClient($, server, always), true)) // a fresh client: it reads the choice just made
+}
+
 async function closeHelp($: Engine): Promise<void> {
   await update($, helpOpen, () => false)
   await $.store.set('helpSeen', true).catch(() => undefined)
@@ -369,6 +375,8 @@ export const register: Register = (on, options) => {
         '  /sudare <topic>         switch conversation and show its messages',
         '  /sudare new <topic> @name   start a conversation',
         '  /sudare signout         forget the sign-in on this machine',
+        '',
+        `Signed in: ${isSignedIn() ? 'yes' : 'no'} · stays signed in across restarts: ${keepsSignIn() ? 'yes (7 days)' : 'no'}`,
       ].join('\n'),
     }
   })
@@ -417,7 +425,8 @@ export const register: Register = (on, options) => {
           <Text dimColor>簾 Sudare </Text>
           <Button key="signin" label="Sign in" onPress={async () => void (await say($, await signIn($, c, allowHuman)))} />
           {allowHuman && <Text>  </Text>}
-          {allowHuman && <Button key="keep" plain label={`${isKept ? '☑' : '☐'} stay signed in for 7 days`} onPress={() => setKeep($, c, !isKept)} />}
+          {allowHuman && !isKept && <Button key="signin-keep" label="Sign in for 7 days" onPress={() => signInKept($, server, keep)} />}
+          {allowHuman && isKept && <Button key="keep-off" plain label="(stays signed in for 7 days · change)" onPress={() => setKeep($, c, false)} />}
           {note && <Text dimColor>  {note}</Text>}
         </Box>
       )
