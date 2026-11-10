@@ -302,6 +302,12 @@ async function openPrivate($: Engine, c: Client, conv: string, person: SudarePer
   await openConv($, c, made)
 }
 
+/** Invite is always where people look for it. A private chat stays 1:1, so there it starts a room with that person. */
+async function inviteFromPrivate($: Engine, from: SudareTimeline): Promise<void> {
+  await update($, compose, () => ({ isOpen: true, people: from.others.map((o) => o.handle) }))
+  await say($, 'A private chat is just you two. Name a new room below, then invite people into it.')
+}
+
 /** A one-time invitation link for this conversation, copied to the clipboard. */
 async function inviteLink($: Engine, c: Client, conv: string, surface: 'terminal' | 'desktop' | 'vscode' | 'mobile'): Promise<void> {
   const r = await c.api('POST', `/convs/${conv}/invites`, { link: true })
@@ -599,7 +605,7 @@ export const register: Register = (on, options) => {
             <Button key="help-close" label="OK" onPress={() => closeHelp($)} />
           </Box>
         )}
-        {note && note.startsWith('Invitation link') && <Text dimColor>{note}</Text>}
+        {note && (note.startsWith('Invitation link') || note.startsWith('A private chat')) && <Text dimColor>{note}</Text>}
         {snap.convs.length === 0 && <Text dimColor>No rooms yet. Join one with an invitation link.</Text>}
         {shown && (
           <Box flexDirection="column">
@@ -675,6 +681,7 @@ export const register: Register = (on, options) => {
         )}
         <Box gap={2} flexWrap="wrap">
           {shown && shown.canInvite && <Button key="invite" label="Invite" onPress={() => inviteLink($, c, shown.conv, e.surface)} />}
+          {shown && shown.isPrivate && !form.isOpen && <Button key="invite" label="Invite" onPress={() => inviteFromPrivate($, shown)} />}
           {shown && !form.isOpen && <Button key="new" label="New room" onPress={() => update($, compose, () => ({ isOpen: true, people: shown.others.map((o) => o.handle) }))} />}
           <Button key="web" label="Web" onPress={() => c.open(c.base)} />
           <Button key="help" label="Help" onPress={() => update($, helpOpen, (v) => !v)} />
