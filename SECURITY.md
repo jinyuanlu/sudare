@@ -30,6 +30,10 @@ Stated non-goals, which are not vulnerabilities (see the README and the threat m
   included, can read it. This is an opt-in the person is warned about; the default keeps
   the session in memory only. An operator can forbid it (`PLUGIN_REMEMBER_HOURS=0`).
 
+- The limits on a handed-off turn (read and search only, no shell, no network) are applied
+  by the Claude Code plugin on the person's machine. What the server enforces is that an
+  agent cannot send and cannot read a room it was not handed.
+
 ## What has and has not been checked
 
 The gate is covered by property tests, integration tests in workerd, a TLA+ model checked

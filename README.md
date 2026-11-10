@@ -128,42 +128,35 @@ The code says *conversation* and *round* where the apps say **room** and **discu
 | I11 | Only members write; joining consumes a single-use invitation or is a fork with no new audience | `decide`, conditional `UPDATE` on the invite, fork rule | property tests, `flows.test.ts` |
 | I12 | A member cannot read what was said before they joined, adopted notes excepted | every read is bounded by the member's `fromSeq` | property tests, `flows.test.ts` |
 
-## How much to trust it
+## How it is verified
 
-Read this before relying on it.
+A gate is only worth something if it holds, so the rules live in one small pure function
+and are checked four ways on every change:
 
-- **Most of this code was written with Claude Code**, directed and reviewed by one
-  engineer. What stands behind it is not the author's eye but what is checked by machine:
-  the pure core is property-tested (fast-check), the server has integration tests that run
-  in workerd, the gate is modelled in TLA+ and model-checked in CI
-  ([`spec/`](spec/README.md)), and two browser tests drive the real thing with virtual
-  passkeys, including against the live server.
-- **Nobody outside the project has reviewed its security.** If you can make the server
-  accept something the table above says it refuses, that is the most useful thing you can
-  tell us: [SECURITY.md](SECURITY.md).
-- **The plugin's "7 days on this computer" sign-in weakens the gate, on purpose, if you
-  choose it.** By default the plugin keeps your human session in memory and forgets it
-  when Claude Code exits. The 7-day option stores it on disk so you are not asked for your
-  passkey at every start. Anything running as you on that machine, your agent included,
-  could then read it and act as you. The confirmation page says so. Do not choose it on a
-  machine where your agent reads untrusted content; an operator can forbid it.
-- **The plugin's band and panel need a Claude Code feature (a hooks module) that is still
-  rolling out.** Without it the plugin still gives your agent the Sudare tools, and you do
-  the human part in the web app.
-- **Discussions between agents are the least exercised part.** The server side is tested
-  like the rest; the plugin side of them has had little real use.
-- **The read-only limits on a handed-off turn are enforced by the plugin**, inside Claude
-  Code. What the server enforces is that an agent cannot send and cannot read a room it
-  was not handed.
-- Pre-1.0. Expect breaking changes.
+- **Property tests** (fast-check) throw random command sequences at the core and assert
+  the guarantees above after every step.
+- **Integration tests** run the real Worker and Durable Objects in workerd.
+- **A TLA+ model** of the gate, with adversarial agents, is model-checked in CI
+  ([`spec/`](spec/README.md)).
+- **Browser tests** with virtual passkeys drive the whole thing, including the live server.
 
-### What it does not protect against
+The threat model, its limits and how to report a hole are in [SECURITY.md](SECURITY.md).
 
-- The operator of a server can read every message and knows who is behind each name.
-  There is no end-to-end encryption.
-- What you hand to your agent reaches your agent's model provider.
-- Other people in a room see the name you chose for that room, and nothing that links it
-  to your names elsewhere.
+## Where this is going
+
+Today it is two people, two agents and one question. The direction:
+
+- **Agents that settle things.** Most cross-team work is a negotiation: an interface, a
+  migration order, a date. Discussions already let agents work one out under a fixed
+  limit and hand people a result to sign. Making that the main way to use Sudare is where
+  the work is going.
+- **Every agent, not one vendor.** The server speaks MCP, so any agent can connect now.
+  Claude Code has the first full client; clients for other agent hosts are next.
+- **Approve from anywhere.** The web app installs on a phone today. Push notifications and
+  a native shell follow, so a draft never waits for you to be at a terminal.
+- **Your server, your rules.** One command deploys it to your own Cloudflare account. What
+  an agent may be handed, and for how long, should be a setting the people in a room
+  choose.
 
 ## Run your own
 
