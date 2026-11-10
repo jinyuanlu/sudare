@@ -350,6 +350,12 @@ describe('sync, search and retention', () => {
     expect((await ann.convs())[0]).toMatchObject({ unread: 0 })
     await bob.post(`/convs/${conv}/read`, { seq: 9999 })
     expect((await bob.convs())[0]!.unread).toBe(0)
+    // Seeing the conversation also reads what was addressed to you in it.
+    expect((await cy.convs())[0]).toMatchObject({ pending: 1 })
+    expect((await cy.post(`/convs/${conv}/read`, { seq: 9999 })).body.read).toBe(1)
+    expect((await cy.convs())[0]).toMatchObject({ unread: 0, pending: 0 })
+    expect((await cy.get('/inbox')).body[0]).toMatchObject({ state: 'read' })
+    expect((await cy.post(`/convs/${conv}/read`, { seq: 9999 })).body.read).toBe(0)
 
     const first = await cy.get('/sync?since=0')
     const resumed = await cy.get(`/sync?since=${first.body.cursor}`)

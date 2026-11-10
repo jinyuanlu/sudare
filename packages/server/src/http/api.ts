@@ -315,8 +315,12 @@ api.post('/convs/:id/messages', anyHuman, async (c) => {
 
 api.post('/convs/:id/read', anyHuman, async (c) => {
   const { seq } = await body(c, z.object({ seq: z.number().int().min(0) }))
-  await inbox(c).markRead(param(c, 'id', isConvId), seq)
-  return c.json({})
+  const id = param(c, 'id', isConvId)
+  const read = await inbox(c).markRead(id, seq)
+  for (const of of read) {
+    c.executionCtx.waitUntil(conv(c, id).exec(id, { t: 'receipt', id: newEventId(), principal: me(c), of, state: 'read' }).catch(() => undefined))
+  }
+  return c.json({ read: read.length })
 })
 
 // -- invitations --------------------------------------------------------------------

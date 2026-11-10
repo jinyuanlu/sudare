@@ -47,8 +47,8 @@ const load = async (c: Client): Promise<SudareSnapshot | null> => {
   }
 }
 
-/** The last messages of one conversation, with handles in place of alias ids. Marks it read. */
-const loadTimeline = async (c: Client, conv: string): Promise<SudareTimeline | null> => {
+/** The last messages of one conversation, with handles in place of alias ids. */
+const loadTimeline = async (c: Client, conv: string, isSeen: boolean): Promise<SudareTimeline | null> => {
   const [view, page] = await Promise.all([c.api('GET', `/convs/${conv}`), c.api('GET', `/convs/${conv}/events?limit=40`)])
   if (!view.ok || !page.ok) return null
   const v = view.body as Json
@@ -64,7 +64,8 @@ const loadTimeline = async (c: Client, conv: string): Promise<SudareTimeline | n
     return []
   })
   const last = events[events.length - 1]
-  if (last) void c.api('POST', `/convs/${conv}/read`, { seq: num(last.seq) })
+  // Only a person looking at it counts as reading; a background refresh does not.
+  if (last && isSeen) await c.api('POST', `/convs/${conv}/read`, { seq: num(last.seq) })
   const others = members.filter((m) => m.me !== true && m.left !== true).map((m) => str(m.handle))
   return { conv, topic: str(v.topic), me, others, lines }
 }
@@ -76,14 +77,14 @@ function say($: Engine, text: string) {
   return update($, notice, () => text)
 }
 
-async function refresh($: Engine, c: Client): Promise<void> {
+async function refresh($: Engine, c: Client, isSeen = false): Promise<void> {
   const next = isSignedIn() ? await load(c) : null
   await update($, signedIn, () => isSignedIn())
   await update($, snapshot, () => next ?? EMPTY)
   const picked = await read($, current)
   const here = picked ?? next?.convs[0]?.id ?? null
   if (here !== picked) await update($, current, () => here)
-  const shown = here && isSignedIn() ? await loadTimeline(c, here).catch(() => null) : null
+  const shown = here && isSignedIn() ? await loadTimeline(c, here, isSeen).catch(() => null) : null
   await update($, timeline, () => shown)
   const waiting = next ? next.inbox.filter((i) => i.state === 'unread').length + next.drafts.length + next.invites.length : 0
   $.ui.status(!isSignedIn() ? undefined : waiting > 0 ? `簾 ${waiting} waiting` : '簾')
@@ -163,6 +164,7 @@ async function post($: Engine, c: Client, path: string, body: Json, done: string
 
 async function openConv($: Engine, c: Client, conv: string): Promise<void> {
   await update($, current, () => conv)
+  await refresh($, c, true)
   await refresh($, c)
 }
 

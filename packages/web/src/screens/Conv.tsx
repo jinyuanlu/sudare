@@ -103,7 +103,7 @@ export const ConvScreen = ({ id, at }: { id: ConvId; at: number | null }) => {
   useEffect(() => {
     if (!tl.ready || !visible || !atBottom || lastSeq <= marked.current) return
     marked.current = lastSeq
-    void api.read(id, lastSeq).then(() => refresh('convs'), () => { marked.current = 0 })
+    void api.read(id, lastSeq).then(() => refresh('convs', 'inbox'), () => { marked.current = 0 })
   }, [tl.ready, visible, atBottom, lastSeq])
 
   if (!view) return <Page title={t('conv.title')}>{conv.error ? <ErrorNote error={conv.error} /> : <Loading />}</Page>

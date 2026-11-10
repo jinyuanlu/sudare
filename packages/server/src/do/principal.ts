@@ -234,10 +234,17 @@ export class PrincipalDO extends DurableObject<Env> {
     }))
   }
 
-  /** Mark the timeline read up to `seq`. Addressed messages keep their own state machine. */
-  async markRead(conv: ConvId, seq: number): Promise<void> {
-    this.sql.exec(`UPDATE convs SET read_seq = max(read_seq, min(?, delivered_seq)) WHERE conv = ?`, seq, conv)
+  /** Mark the timeline read up to `seq`. Returns the addressed messages this read. */
+  async markRead(conv: ConvId, seq: number): Promise<EventId[]> {
+    // Having the conversation on screen is reading it: addressed messages up to
+    // `seq` leave "unread" too, through the same state machine as an explicit read.
+    const read = this.ctx.storage.transactionSync(() => {
+      this.sql.exec(`UPDATE convs SET read_seq = max(read_seq, min(?, delivered_seq)) WHERE conv = ?`, seq, conv)
+      const unread = this.all<{ msg: string }>(`SELECT msg FROM items WHERE conv = ? AND s = 'unread' AND cseq <= ? ORDER BY cseq`, conv, seq)
+      return unread.map((r) => r.msg as EventId).filter((msg) => this.move(msg, { a: 'read' }, { scope: 'human' }).ok)
+    })
     this.announce(false)
+    return read
   }
 
   async topicOf(conv: ConvId): Promise<string | null> {
