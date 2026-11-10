@@ -68,6 +68,7 @@ export const MembersDialog = ({ view, onClose }: { view: ConvView; onClose: () =
         {view.members.map((m) => (
           <li key={m.alias} class={m.left ? 'dim' : ''}>
             <span>
+              {m.active && !m.left ? <span class="here" title={t('members.here')} aria-label={t('members.here')}>● </span> : null}
               {m.handle}
               {m.me ? <span class="tag">{t('members.you')}</span> : null}
               {m.creator ? <span class="tag">{t('members.creator')}</span> : null}

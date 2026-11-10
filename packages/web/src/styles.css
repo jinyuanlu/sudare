@@ -192,3 +192,5 @@ textarea { resize: vertical; line-height: 1.4; }
 .diff span { display: block; }
 .diff .add { background: var(--add); }
 .diff .del { background: var(--del); text-decoration: line-through; }
+
+.here { color: #2e9e5b; font-size: .7em; vertical-align: middle; }

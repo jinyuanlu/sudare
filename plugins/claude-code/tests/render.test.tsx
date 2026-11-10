@@ -22,8 +22,9 @@ const STATE: Record<string, unknown> = {
     seats: [{ round: 'r1', conv: 'c1', topic: 'Cache plan', goal: 'Agree on a TTL', isSeated: false }],
     at: 1,
   },
+  target: 'fox',
   timeline: {
-    conv: 'c1', topic: 'Cache plan', me: 'ann', others: ['fox'],
+    conv: 'c1', topic: 'Cache plan', me: 'ann', others: [{ handle: 'fox', alias: 'a1', isHere: true }, { handle: 'owl', alias: 'a2', isHere: false }],
     lines: [
       { id: 'e1', from: 'fox', text: 'what TTL?', via: 'human', isMine: false },
       { id: 'e2', from: 'ann', text: 'Five minutes.', via: 'delegate', isMine: true },
@@ -49,7 +50,7 @@ test('signed in: the band shows what is waiting and the panel shows the conversa
     const pane = await $.ui.mount({ ...PANE, surface })
     expect((await pane.find({ type: 'Text', text: /what TTL\?/ }))).toBeDefined()
     expect((await pane.find({ type: 'Text', text: /via agent/ }))).toBeDefined()
-    for (const key of ['invite', 'refresh', 'web', 'signout']) expect(await pane.find({ key })).toBeDefined()
+    for (const key of ['invite', 'refresh', 'web', 'signout', 'to-all', 'to-fox', 'to-owl', 'private']) expect(await pane.find({ key })).toBeDefined()
     await pane.unmount()
   }
 })

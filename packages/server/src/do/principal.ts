@@ -588,12 +588,26 @@ export class PrincipalDO extends DurableObject<Env> {
     if (request.headers.get('Upgrade') !== 'websocket') return new Response('expected websocket', { status: 426 })
     const pair = new WebSocketPair()
     this.ctx.acceptWebSocket(pair[1])
+    pair[1].serializeAttachment({ p: request.headers.get('X-Sudare-Principal') })
+    this.seen(pair[1])
     pair[1].send(JSON.stringify({ seq: this.head() }))
     return new Response(null, { status: 101, webSocket: pair[0] })
   }
 
   override async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
-    if (message === 'ping') ws.send(JSON.stringify({ seq: this.head() }))
+    if (message !== 'ping') return
+    ws.send(JSON.stringify({ seq: this.head() }))
+    this.seen(ws)
+  }
+
+  /** An open socket that keeps pinging is a person who is here. */
+  private seen(ws: WebSocket): void {
+    const p = (ws.deserializeAttachment() as { p?: string | null } | null)?.p
+    if (!p) return
+    this.ctx.waitUntil(
+      this.env.DB.prepare(`UPDATE principals SET last_seen = ? WHERE id = ? AND (last_seen IS NULL OR last_seen < ?)`)
+        .bind(Date.now(), p, Date.now() - 60_000).run().catch(() => undefined),
+    )
   }
 
   override async webSocketClose(ws: WebSocket, code: number): Promise<void> {

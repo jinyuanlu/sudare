@@ -16,5 +16,9 @@ export const convStub = (env: Env, conv: ConvId) =>
 export const principalStub = (env: Env, p: PrincipalId) =>
   env.PRINCIPAL.get(env.PRINCIPAL.idFromName(p)) as unknown as Rpc<PrincipalDO>
 
-export const principalSocket = (env: Env, p: PrincipalId, request: Request) =>
-  env.PRINCIPAL.get(env.PRINCIPAL.idFromName(p)).fetch(request)
+export const principalSocket = (env: Env, p: PrincipalId, request: Request) => {
+  // The object learns whose socket this is from the Worker, never from the client.
+  const headers = new Headers(request.headers)
+  headers.set('X-Sudare-Principal', p)
+  return env.PRINCIPAL.get(env.PRINCIPAL.idFromName(p)).fetch(new Request(request, { headers }))
+}

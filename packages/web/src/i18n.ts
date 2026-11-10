@@ -155,6 +155,8 @@ const en = {
   'sys.noteEndorsed': '{who} endorsed revision {rev} of a note',
 
   'members.you': 'you',
+  'members.here': 'here now',
+  'conv.hereNow': '{n} here now',
   'members.creator': 'creator',
   'members.left': 'left',
   'members.chat': 'Private chat',
@@ -461,6 +463,8 @@ const zh: Record<Key, string> = {
   'sys.noteEndorsed': '{who} 认可了一份纪要的第 {rev} 版',
 
   'members.you': '你',
+  'members.here': '在线',
+  'conv.hereNow': '{n} 人在线',
   'members.creator': '创建者',
   'members.left': '已离开',
   'members.chat': '私聊',

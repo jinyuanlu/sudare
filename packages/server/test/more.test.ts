@@ -91,6 +91,17 @@ describe('live updates and push', () => {
     ws.close()
   })
 
+  it('shows the people one shares a conversation with whether they are here now', async () => {
+    const { who: ann, conv } = await founder()
+    const bob = await invite(ann, conv, 'bob')
+    const here = async (who: Person) => Object.fromEntries(((await who.get(`/convs/${conv}`)).body.members as any[]).map((m) => [m.handle, m.active]))
+    await eventually(async () => (await here(ann)).bob === true, 'bob seen')
+    expect(await here(bob)).toMatchObject({ ann: true, bob: true })
+    await db.prepare(`UPDATE principals SET last_seen = ? WHERE id = ?`).bind(Date.now() - 10 * 60_000, (await bob.get('/me')).body.principal).run()
+    // Reading as ann does not make bob look present; bob is still present to himself.
+    expect((await here(ann)).bob).toBe(false)
+  })
+
   it('accepts only real push services as push endpoints', async () => {
     const { who: ann } = await founder()
     expect(validPushEndpoint('https://fcm.googleapis.com/fcm/send/abc')).toBe(true)

@@ -125,7 +125,7 @@ export const ConvScreen = ({ id, at }: { id: ConvId; at: number | null }) => {
   return (
     <Page
       wide title={view.topic}
-      sub={<button type="button" class="link" onClick={() => setPanel('members')}>{t('common.members', { n: active.length })}{view.archived ? ` · ${t('home.archived')}` : ''}</button>}
+      sub={<button type="button" class="link" onClick={() => setPanel('members')}>{t('common.members', { n: active.length })} · {t('conv.hereNow', { n: active.filter((m) => m.active).length })}{view.archived ? ` · ${t('home.archived')}` : ''}</button>}
       actions={<><Link class="button" href={`/c/${id}/notes`}>{t('notes.title')}</Link><Menu view={view} openRound={round !== null} onPanel={setPanel} onError={setFailure} /></>}
     >
       <div class="conv">

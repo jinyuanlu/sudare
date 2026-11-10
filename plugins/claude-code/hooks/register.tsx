@@ -6,7 +6,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { SudareConv, SudareDraft, SudareInvite, SudareItem, SudareLine, SudareLink, SudareSeat, SudareSnapshot, SudareTimeline } from '../types'
+import type { SudareConv, SudareDraft, SudareInvite, SudareItem, SudareLine, SudareLink, SudarePerson, SudareSeat, SudareSnapshot, SudareTimeline } from '../types'
 import { isSignedIn, makeClient, type Client, type Json } from './client'
 import { enterReadonly, isOwnCall, isPluginOnlyTool, leaveReadonly, refusal } from './guard'
 
@@ -17,6 +17,8 @@ const EMPTY: SudareSnapshot = { convs: [], inbox: [], drafts: [], invites: [], s
 const snapshot = atom({ plugin: 'sudare', key: 'snapshot' } as const, EMPTY)
 const current = atom({ plugin: 'sudare', key: 'current' } as const, null)
 const timeline = atom({ plugin: 'sudare', key: 'timeline' } as const, null)
+/** Who the next message in the panel is addressed to; null means everyone in the conversation. */
+const target = atom({ plugin: 'sudare', key: 'target' } as const, null)
 const link = atom({ plugin: 'sudare', key: 'link' } as const, null)
 const signedIn = atom({ plugin: 'sudare', key: 'isSignedIn' } as const, false)
 const notice = atom({ plugin: 'sudare', key: 'notice' } as const, null)
@@ -66,12 +68,13 @@ const loadTimeline = async (c: Client, conv: string, isSeen: boolean): Promise<S
   const last = events[events.length - 1]
   // Only a person looking at it counts as reading; a background refresh does not.
   if (last && isSeen) await c.api('POST', `/convs/${conv}/read`, { seq: num(last.seq) })
-  const others = members.filter((m) => m.me !== true && m.left !== true).map((m) => str(m.handle))
+  const others = members.filter((m) => m.me !== true && m.left !== true).map((m): SudarePerson => ({ handle: str(m.handle), alias: str(m.alias), isHere: m.active === true }))
   return { conv, topic: str(v.topic), me, others, lines }
 }
 
 // The position in the person's inbox log this session has seen. Module state: a reload starts over, which only costs one refetch.
 let cursor = 0
+let ticks = 0
 
 function say($: Engine, text: string) {
   return update($, notice, () => text)
@@ -98,7 +101,8 @@ async function tick($: Engine, c: Client): Promise<void> {
   const body = r.body as { cursor?: number; events?: unknown[] }
   const moved = (body.events?.length ?? 0) > 0
   cursor = body.cursor ?? cursor
-  if (moved) await refresh($, c)
+  ticks += 1
+  if (moved || ticks % 3 === 0) await refresh($, c) // every 30 s regardless: who is here changes without an event
 }
 
 async function signIn($: Engine, c: Client, allowHuman: boolean): Promise<string> {
@@ -163,16 +167,17 @@ async function post($: Engine, c: Client, path: string, body: Json, done: string
 }
 
 async function openConv($: Engine, c: Client, conv: string): Promise<void> {
+  if ((await read($, current)) !== conv) await update($, target, () => null)
   await update($, current, () => conv)
   await refresh($, c, true)
   await refresh($, c)
 }
 
 /** "@a @b rest" names people; anything else is a message to the whole conversation. */
-async function sayHere($: Engine, c: Client, conv: string, text: string): Promise<void> {
+async function sayHere($: Engine, c: Client, conv: string, text: string, picked: string | null): Promise<void> {
   const body = text.trim()
   if (body === '') return
-  const to = [...body.matchAll(/(^|\s)@([^\s@]{1,24})/g)].map((m) => m[2]!)
+  const to = [...new Set([...(picked ? [picked] : []), ...[...body.matchAll(/(^|\s)@([^\s@]{1,24})/g)].map((m) => m[2]!)])]
   const r = await c.api('POST', `/convs/${conv}/messages`, { id: newId(), text: body, to_handles: to })
   if (!r.ok && str((r.body as Json).error) === 'recipient_unknown') await c.api('POST', `/convs/${conv}/messages`, { id: newId(), text: body })
   else if (!r.ok) await say($, `Not sent: ${str((r.body as Json).error) || r.status}`)
@@ -180,7 +185,16 @@ async function sayHere($: Engine, c: Client, conv: string, text: string): Promis
 }
 
 const transcript = (t: SudareTimeline): string =>
-  `you (${t.me})${t.others.length ? ` with ${t.others.map((h) => `@${h}`).join(', ')}` : ', nobody else here yet'}\n` + (t.lines.length === 0 ? '(no messages yet)' : t.lines.map((l) => `${l.isMine ? 'you' : `@${l.from}`}${l.via === 'delegate' ? ' (via agent)' : l.via === 'autonomous' ? ' (agent, round)' : ''}: ${l.text}`).join('\n'))
+  `you (${t.me})${t.others.length ? ` with ${t.others.map((o) => `@${o.handle}${o.isHere ? ' (here now)' : ''}`).join(', ')}` : ', nobody else here yet'}\n` + (t.lines.length === 0 ? '(no messages yet)' : t.lines.map((l) => `${l.isMine ? 'you' : `@${l.from}`}${l.via === 'delegate' ? ' (via agent)' : l.via === 'autonomous' ? ' (agent, round)' : ''}: ${l.text}`).join('\n'))
+
+/** The private chat with one person from this conversation: opened if it exists, created if not. */
+async function openPrivate($: Engine, c: Client, conv: string, person: SudarePerson): Promise<void> {
+  const r = await c.api('POST', '/convs', { topic: `@${person.handle}`, members: [{ conv, alias: person.alias }], dm: true })
+  const made = str((r.body as Json).conv)
+  if (!r.ok || made === '') return void (await say($, `No private chat: ${str((r.body as Json).error) || r.status}`))
+  await update($, target, () => null)
+  await openConv($, c, made)
+}
 
 /** A one-time invitation link for this conversation, copied to the clipboard. */
 async function inviteLink($: Engine, c: Client, conv: string, surface: 'terminal' | 'desktop' | 'vscode' | 'mobile'): Promise<void> {
@@ -416,7 +430,9 @@ export const register: Register = (on, options) => {
     if (server === '') return <Text dimColor>Set the Sudare server URL in /config.</Text>
     const c = makeClient($, server, keep)
     const [snap, here, isIn, shown, note] = [await read($, snapshot), await read($, current), await read($, signedIn), await read($, timeline), await read($, notice)]
-    const room = Math.max(8, (e.viewport?.rows ?? 30) - snap.convs.length - 10)
+    const room = Math.max(8, (e.viewport?.rows ?? 30) - snap.convs.length - 12)
+    const to = await read($, target)
+    const picked = shown?.others.find((o) => o.handle === to) ?? null
     if (!isIn) {
       return (
         <Box flexDirection="column">
@@ -436,7 +452,7 @@ export const register: Register = (on, options) => {
           <Box flexDirection="column">
             <Text>
               <Text bold>{clip(shown.topic, 50)}</Text>
-              <Text dimColor>{shown.others.length > 0 ? `  you (${shown.me}) with ${shown.others.map((h) => `@${h}`).join(', ')}` : `  you (${shown.me})`}</Text>
+              <Text dimColor>{`  you are ${shown.me}`}{shown.others.length > 0 ? ` · ${shown.others.filter((o) => o.isHere).length} of ${shown.others.length} others here now` : ''}</Text>
             </Text>
             {shown.others.length === 0 && <Text>Nobody else is here yet. Press Invite below, then open the copied link in a private browser window to add a second person.</Text>}
             {shown.others.length > 0 && shown.lines.length === 0 && <Text dimColor>Nobody has written yet. Write below; everyone here receives it.</Text>}
@@ -449,7 +465,21 @@ export const register: Register = (on, options) => {
             ))}
           </Box>
         )}
-        {shown && <Input key={`say-${shown.conv}`} placeholder="Write a message… (@name to address someone)" submitLabel="Send" onSubmit={(text) => void sayHere($, c, shown.conv, text)} />}
+        {shown && shown.others.length > 0 && (
+          <Box gap={2} flexWrap="wrap">
+            <Text dimColor>To</Text>
+            <Button key="to-all" {...(to !== null ? { plain: true as const } : {})} label="everyone" onPress={() => update($, target, () => null)} />
+            {shown.others.map((o) => (
+              <Button key={`to-${o.handle}`} {...(to !== o.handle ? { plain: true as const } : {})} label={`${o.isHere ? '● ' : '○ '}${o.handle}`} onPress={() => update($, target, () => o.handle)} />
+            ))}
+            {picked && <Button key="private" plain label="private chat" onPress={() => openPrivate($, c, shown.conv, picked)} />}
+          </Box>
+        )}
+        {shown && (
+          <Input key={`say-${shown.conv}`} submitLabel="Send"
+            placeholder={picked ? `Message for ${picked.handle} (the others can read it too)` : shown.others.length > 0 ? 'Message to everyone here' : 'Write a message…'}
+            onSubmit={(text) => void sayHere($, c, shown.conv, text, picked?.handle ?? null)} />
+        )}
         {others.length > 0 && (
           <Box flexDirection="column">
             <Text dimColor>Other conversations</Text>

@@ -48,6 +48,7 @@ instead. `claude --debug` says `hooks module sudare… loaded` when it is on.
 | You do | What happens |
 | --- | --- |
 | **Open Sudare** on the band, or `/sudare panel` | The panel: your conversations, the messages of the one you pick, and a box to write in. |
+| **To** row in the panel | `everyone`, or one person. `●` means they are here now. A message for one person is still readable by the others; it also lands in that person's inbox. `private chat` opens a separate conversation with just the two of you. |
 | `/sudare` | Lists your conversations. `/sudare <topic prefix>` picks one and prints its recent messages. |
 | `@fox see you at 3` + Enter | Sends to `@fox` in the current conversation (or your private chat with them). |
 | **Reply** | Puts `@name ` in your prompt; type and press Enter to send as yourself. |

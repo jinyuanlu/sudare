@@ -6,7 +6,7 @@ import type { ErrorCode } from './result'
 
 export type ApiError = { error: ErrorCode; detail?: unknown }
 
-export type MemberView = { alias: AliasId; handle: string; left: boolean; creator: boolean; me: boolean }
+export type MemberView = { alias: AliasId; handle: string; left: boolean; creator: boolean; me: boolean; active?: boolean }
 
 export type RoundView = {
   id: RoundId

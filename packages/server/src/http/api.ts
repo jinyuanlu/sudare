@@ -83,6 +83,7 @@ const human = (kinds: Session['kind'][] = ['web', 'plugin']) => async (c: C, nex
   if (!kinds.includes(session.kind)) return fail('forbidden_scope')
   if (session.via === 'cookie' && c.req.method !== 'GET' && !sameOrigin(c)) return fail('forbidden_scope', 'origin')
   if (c.req.method !== 'GET') await throttle(c.env.RL_WRITE, session.principal)
+  c.executionCtx.waitUntil(directory(c.env).seen(session.principal).catch(() => undefined))
   c.set('session', session)
   await next()
 }
@@ -258,7 +259,13 @@ api.post('/convs', anyHuman, async (c) => {
   return send(c, await createConv(c.env, me(c), { ...input, members: input.members as AliasRef[], path: { kind: 'human' } }), 201)
 })
 
-api.get('/convs/:id', anyHuman, async (c) => send(c, await conv(c, param(c, 'id', isConvId)).view(me(c))))
+api.get('/convs/:id', anyHuman, async (c) => {
+  const id = param(c, 'id', isConvId)
+  const [view, active] = await Promise.all([conv(c, id).view(me(c)), directory(c.env).activeIn(id)])
+  if (!view.ok) return send(c, view)
+  // "Here now": the person's client was connected or polling within the last two minutes.
+  return c.json({ ...view.value, members: view.value.members.map((m) => ({ ...m, active: m.me || (!m.left && active.has(m.alias)) })) })
+})
 
 api.patch('/convs/:id', anyHuman, async (c) => {
   const id = param(c, 'id', isConvId)

@@ -40,6 +40,14 @@ export const directory = (env: Env) => {
     setDefaultHandle: (id: PrincipalId, handle: string) =>
       run(db, `UPDATE principals SET default_handle = ? WHERE id = ? AND default_handle IS NULL`, handle, id),
 
+    // presence
+    /** At most one write a minute per person. */
+    seen: (id: PrincipalId) => run(db, `UPDATE principals SET last_seen = ? WHERE id = ? AND (last_seen IS NULL OR last_seen < ?)`, Date.now(), id, Date.now() - 60_000),
+    /** Aliases of a conversation whose person was seen in the last two minutes. */
+    activeIn: async (conv: ConvId) =>
+      new Set((await all<{ alias: AliasId }>(db,
+        `SELECT a.alias AS alias FROM aliases a JOIN principals p ON p.id = a.principal WHERE a.conv = ? AND a.left_at IS NULL AND p.last_seen > ?`, conv, Date.now() - 120_000)).map((r) => r.alias)),
+
     // devices
     device: (id: DeviceId) => first<DeviceRow>(db, `SELECT * FROM devices WHERE id = ?`, id),
     deviceByToken: (hash: string) => first<DeviceRow>(db, `SELECT * FROM devices WHERE token_hash = ?`, hash),
