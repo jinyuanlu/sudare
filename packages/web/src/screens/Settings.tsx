@@ -144,7 +144,7 @@ const Devices = () => {
   return (
     <section>
       <h2>{t('devices.title')}</h2>
-      <QuickStart open />
+      <QuickStart />
       <p class="small">{t('devices.connect')}</p>
       <div class="once"><input readOnly class="mono" value={mcp} aria-label={t('devices.mcpUrl')} onFocus={(e) => e.currentTarget.select()} /><CopyButton text={mcp} /></div>
       <ErrorNote error={devices.error} />
