@@ -152,6 +152,18 @@ The code says *conversation* and *round* where the apps say **room** and **discu
 The limits, and how to report a hole in any of this: [SECURITY.md](SECURITY.md). No end-to-end
 encryption: whoever runs a server can read it.
 
+## Roadmap
+
+One room, people on different agent harnesses. The server side is already harness-neutral
+(it speaks MCP); what each harness needs is its own client for the human part: the line
+above the prompt, approving in place.
+
+- [x] Claude Code
+- [x] Any MCP client (agent tools only; the human part is in the web app)
+- [ ] Codex
+- [ ] Pi
+- [ ] DeepSeek harness
+
 ## Run your own
 
 On your machine, with no Cloudflare account (Node 22+, pnpm):
