@@ -13,9 +13,9 @@ import { TOKEN_PREFIX, revokeGrants } from '../auth/oauth'
 import { addOptions, addVerify, assertOptions, assertVerify, registerOptions, registerVerify } from '../auth/passkey'
 import { adoptSession, clearCookie, endDeviceSessions, endSession, issueSession, readSession, sessionCookie, type Session } from '../auth/session'
 import { deviceView, directory } from '../directory'
-import { origin, rememberHours, type Env } from '../env'
+import { openSignup, origin, rememberHours, type Env } from '../env'
 import { pushConfigured } from '../push'
-import { acceptInvite, bootstrap, createConv, declineInvite, inviteByCode, inviteCard, inviteLink, inviteMember, inviteOpenTo, roomLink } from '../services/convs'
+import { acceptInvite, bootstrap, createConv, declineInvite, inviteByCode, inviteCard, inviteLink, inviteMember, inviteOpenTo, roomLink, signup } from '../services/convs'
 import { approveDraft } from '../services/drafts'
 import { convStub, principalSocket, principalStub } from '../services/stubs'
 import { Fail, randomToken, sha256, timingSafeEqual } from '../util'
@@ -118,6 +118,12 @@ api.get('/join/:code/check', publicRead, async (c) => {
   const card = i && valid ? await inviteCard(c.env, i) : null
   return c.json({ valid, registered: !!i?.bound, topic: card?.topic ?? null, by: card?.by ?? null, members: card?.members ?? 0 })
 })
+
+/** What a signed-out visitor may know about this server. */
+api.get('/site', publicRead, (c) => c.json({ signup: openSignup(c.env), notice: (c.env.SITE_NOTICE ?? '').slice(0, 200) }))
+
+/** Open sign-up, if the operator allows it: an invitation to a room of your own. */
+api.post('/signup', publicWrite, async (c) => send(c, await signup(c.env), 201))
 
 api.post('/auth/register/options', publicWrite, async (c) => {
   const { code } = await body(c, z.object({ code: z.string().min(16).max(64) }))
@@ -577,6 +583,33 @@ admin.use('*', async (c, next) => {
 admin.post('/bootstrap', async (c) => {
   const input = z.object({ topic: z.string().min(1).max(LIMITS.topic).default('Sudare') }).safeParse(await c.req.json().catch(() => ({})))
   return c.json(await bootstrap(c.env, input.success ? input.data.topic : 'Sudare'), 201)
+})
+
+/**
+ * Erase everything: every room, every inbox, every account, every agent grant. For a
+ * demo server between showings. Works in batches (a Worker may only make so many
+ * calls per request); repeat until `left` is 0.
+ */
+admin.post('/wipe', async (c) => {
+  const input = z.object({ confirm: z.literal('erase everything') }).safeParse(await c.req.json().catch(() => ({})))
+  if (!input.success) return fail('bad_request')
+  const BATCH = 15
+  const convs = (await c.env.DB.prepare(`SELECT id FROM convs LIMIT ?`).bind(BATCH).all<{ id: ConvId }>()).results
+  await Promise.all(convs.map((r) => convStub(c.env, r.id).wipe()))
+  for (const r of convs) {
+    await c.env.DB.batch(['aliases', 'invites'].map((t) => c.env.DB.prepare(`DELETE FROM ${t} WHERE conv = ?`).bind(r.id)).concat(c.env.DB.prepare(`DELETE FROM convs WHERE id = ?`).bind(r.id)))
+  }
+  if (convs.length === BATCH) return c.json({ left: 'rooms' })
+  const people = (await c.env.DB.prepare(`SELECT id FROM principals LIMIT ?`).bind(BATCH).all<{ id: PrincipalId }>()).results
+  await Promise.all(people.map((r) => principalStub(c.env, r.id).wipe()))
+  for (const r of people) {
+    await c.env.DB.batch(['credentials', 'sessions', 'devices', 'human_links'].map((t) => c.env.DB.prepare(`DELETE FROM ${t} WHERE principal = ?`).bind(r.id)).concat(c.env.DB.prepare(`DELETE FROM principals WHERE id = ?`).bind(r.id)))
+  }
+  if (people.length === BATCH) return c.json({ left: 'accounts' })
+  await c.env.DB.batch(['invites', 'challenges', 'human_links', 'sessions'].map((t) => c.env.DB.prepare(`DELETE FROM ${t}`)))
+  const keys = await c.env.OAUTH_KV.list({ limit: 30 })
+  await Promise.all(keys.keys.map((k) => c.env.OAUTH_KV.delete(k.name)))
+  return c.json({ left: keys.list_complete ? 0 : 'grants' })
 })
 
 /** Migration exit: the complete logs as NDJSON, in seq order. */

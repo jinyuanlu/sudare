@@ -3,7 +3,7 @@ import { env } from 'cloudflare:workers'
 import type { ConvId } from '@sudare/protocol'
 import { describe, expect, it } from 'vitest'
 import { validPushEndpoint } from '../src/push'
-import { ORIGIN, agentFor, db, eventually, founder, invite, joinByLink, raw, type Person } from './harness'
+import { ADMIN, ORIGIN, agentFor, db, eventually, founder, invite, joinByLink, raw, type Person } from './harness'
 
 const convStub = (conv: ConvId) => (env as any).CONVERSATION.get((env as any).CONVERSATION.idFromName(conv))
 const texts = async (who: Person, conv: ConvId) =>
@@ -211,5 +211,62 @@ describe('devices', () => {
       body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 't', version: '0' } } }),
     }).then((r) => r.json<any>())
     expect(init.result.serverInfo.name).toBe('sudare')
+  })
+})
+
+describe('a public demo server', () => {
+  const anon = (path: string, body: unknown = {}) =>
+    raw(`/api${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: ORIGIN, 'CF-Connecting-IP': '203.0.113.9' }, body: JSON.stringify(body) })
+  const withSignup = async <T>(vars: Record<string, string>, f: () => Promise<T>): Promise<T> => {
+    const e = env as any
+    const before = { OPEN_SIGNUP: e.OPEN_SIGNUP, SIGNUP_DAILY_LIMIT: e.SIGNUP_DAILY_LIMIT, SITE_NOTICE: e.SITE_NOTICE }
+    Object.assign(e, vars)
+    try { return await f() } finally { Object.assign(e, before) }
+  }
+
+  it('has no sign-up unless the operator turned it on', async () => {
+    expect((await anon('/signup')).status).toBe(404)
+    expect(await raw('/api/site').then((r) => r.json())).toEqual({ signup: false, notice: '' })
+  })
+
+  it('with sign-up on, a stranger gets an account and a room of their own, up to the daily limit', async () => {
+    const already = (await db.prepare(`SELECT count(*) AS n FROM principals`).first<{ n: number }>())!.n
+    await withSignup({ OPEN_SIGNUP: 'on', SIGNUP_DAILY_LIMIT: String(already + 2), SITE_NOTICE: 'Demo server.' }, async () => {
+      expect(await raw('/api/site').then((r) => r.json())).toEqual({ signup: true, notice: 'Demo server.' })
+      const offer = await anon('/signup')
+      expect(offer.status).toBe(201)
+      const { code } = await offer.json<{ code: string }>()
+      const { who, conv } = await joinByLink('zoe', `${ORIGIN}/j/${code}`)
+      const rooms = await who.convs()
+      expect(rooms.map((c) => [c.id, c.topic, c.members])).toEqual([[conv, 'My first room', 1]])
+      // The offer is an ordinary single-use invitation: it registers nobody else.
+      expect((await anon('/auth/register/options', { code })).status).not.toBe(200)
+      // Without Origin it is refused like every other public write.
+      expect((await raw('/api/signup', { method: 'POST' })).status).toBe(403)
+      await joinByLink('yan', `${ORIGIN}/j/${(await (await anon('/signup')).json<{ code: string }>()).code}`)
+      expect((await anon('/signup')).status).toBe(429)
+    })
+  })
+
+  it('can be erased whole by the operator, and only by the operator', async () => {
+    const { who: ann, conv } = await founder()
+    const bob = await invite(ann, conv, 'bob')
+    await ann.send(conv, 'hello')
+    await agentFor(bob)
+    const wipe = (auth: string, body: unknown) =>
+      raw('/admin/wipe', { method: 'POST', headers: { Authorization: auth, 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+    expect((await wipe('Bearer nope', { confirm: 'erase everything' })).status).toBe(401)
+    expect((await wipe(`Bearer ${ADMIN}`, {})).status).toBe(400)
+    let left: unknown = 'start'
+    for (let i = 0; i < 20 && left !== 0; i++) left = (await (await wipe(`Bearer ${ADMIN}`, { confirm: 'erase everything' })).json<{ left: unknown }>()).left
+    expect(left).toBe(0)
+    expect((await ann.get('/me')).status).toBe(401)
+    for (const t of ['principals', 'credentials', 'sessions', 'devices', 'convs', 'aliases', 'invites']) {
+      expect((await db.prepare(`SELECT count(*) AS n FROM ${t}`).first<{ n: number }>())?.n, t).toBe(0)
+    }
+    expect(await runInDurableObject(convStub(conv), (_o: unknown, state: DurableObjectState) => state.storage.sql.exec(`SELECT count(*) AS n FROM sqlite_master WHERE type = 'table' AND name = 'events'`).one().n)).toBe(0)
+    // And the server works afterwards.
+    const { who: cat } = await founder('cat')
+    expect((await cat.convs()).length).toBe(1)
   })
 })

@@ -296,6 +296,13 @@ export class ConversationDO extends DurableObject<Env> {
     return false
   }
 
+  /** The operator erases the server: this room's storage, without the per-member goodbyes. */
+  async wipe(): Promise<void> {
+    await this.ctx.storage.deleteAlarm()
+    await this.ctx.storage.deleteAll()
+    this.state = emptyConv('' as ConvId)
+  }
+
   private async destroy(): Promise<void> {
     const s = this.state
     const people = [...new Set(allMembers(s).map((m) => m.principal))]

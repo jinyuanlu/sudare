@@ -59,6 +59,10 @@ In `wrangler.deploy.jsonc` → `vars`:
 | `ROUND_CLIENT_IDS` | OAuth client ids whose "may take round seats" box is pre-ticked on the consent page. The person can always tick or untick it per device. |
 | `PLUGIN_HUMAN_SESSION` | `on` (default) or `off`. `off` removes the in-plugin human session server-wide: every approval then happens in the web app. |
 | `WEB_SESSION_HOURS` / `PLUGIN_SESSION_HOURS` | Lifetime of a browser session (default 168) and of a plugin-held session (default 8). |
+| `PLUGIN_REMEMBER_HOURS` | How long a plugin session lasts when the person chose "7 days on this computer" (default 168). `0` forbids keeping one. See the trade-off in `plugins/claude-code/README.md`. |
+| `OPEN_SIGNUP` | `off` (default): people come in only through invitations. `on`: the sign-in page has **Create an account**, and anyone gets an account and a room of their own. For a public demo. |
+| `SIGNUP_DAILY_LIMIT` | With open sign-up, the most accounts created in any 24 hours (default 500). |
+| `SITE_NOTICE` | One line shown on the sign-in pages and under the room list, e.g. `Demo server. Data may be wiped.` |
 | `VAPID_PUBLIC_KEY`, `VAPID_SUBJECT` | Web Push. Optional; without them the app works but does not notify when closed. |
 
 Secrets:
@@ -67,8 +71,8 @@ Secrets:
 pnpm wrangler secret put ADMIN_SECRET --config wrangler.deploy.jsonc
 ```
 
-Use at least 24 random characters. It does two things only: creates the first invitation
-link, and exports logs.
+Use at least 24 random characters. It does three things only: creates the first invitation
+link, exports logs, and erases the server (`scripts/wipe.sh`).
 
 For Web Push, generate a key pair, put the public key in `vars`, and store the private one:
 
@@ -96,7 +100,8 @@ a `routes` entry) so that it matches `PUBLIC_ORIGIN`.
 
 ## 4. Let the first person in
 
-There is no sign-up page. The first person enters through a bootstrap invitation:
+Unless `OPEN_SIGNUP` is `on`, there is no sign-up page. The first person enters through a
+bootstrap invitation:
 
 ```bash
 curl -sS -X POST "$PUBLIC_ORIGIN/admin/bootstrap" -H "Authorization: Bearer $ADMIN_SECRET" -H 'Content-Type: application/json' -d '{"topic":"Hello"}'
@@ -134,6 +139,14 @@ because no email is collected. Add a second passkey from Settings on another dev
   `after`. `/admin/export/principal/<principal id>` does the same for an inbox log and
   `/admin/export/directory` for the directory tables. Folding the conversation logs with
   `fold` from `@sudare/protocol` reproduces all state.
+- **Erase everything** (a demo server between showings; there is no undo):
+
+  ```bash
+  ADMIN_SECRET=... sh scripts/wipe.sh "$PUBLIC_ORIGIN"
+  ```
+
+- **Changing a var later**: `scripts/deploy.sh` writes `wrangler.deploy.jsonc` once and
+  never overwrites it. Edit `vars` there and run the script again.
 - **What the operator can see**: everything. Message text and the alias→person mapping
   are stored in plaintext server-side. That is the stated trust model, not an accident.
 

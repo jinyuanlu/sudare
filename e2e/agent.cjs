@@ -34,6 +34,23 @@ const join = async (who, url, handle) => {
   await who.page.getByTestId('composer').waitFor()
 }
 
+/** The first person: through open sign-up where the server has it, else through the operator's link. */
+const start = async (who, handle, topic) => {
+  const site = await fetch(`${ORIGIN}/api/site`).then((r) => r.json())
+  if (!site.signup) {
+    if (!ADMIN) throw new Error('set ADMIN_SECRET (this server has no open sign-up)')
+    const boot = await fetch(`${ORIGIN}/admin/bootstrap`, {
+      method: 'POST', headers: { Authorization: `Bearer ${ADMIN}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ topic }),
+    }).then((r) => r.json())
+    return join(who, boot.url, handle)
+  }
+  await who.page.goto(`${ORIGIN}/login`)
+  await who.page.getByTestId('signup').click()
+  await who.page.getByTestId('handle').fill(handle)
+  await who.page.getByTestId('join').click()
+  await who.page.getByTestId('composer').waitFor()
+}
+
 /** A local MCP client: dynamic registration, then authorization code + PKCE to a loopback port. */
 const enrol = async (who) => {
   let resolve
@@ -83,14 +100,10 @@ const enrol = async (who) => {
 }
 
 ;(async () => {
-  if (!ADMIN) throw new Error('set ADMIN_SECRET')
-  const boot = await fetch(`${ORIGIN}/admin/bootstrap`, {
-    method: 'POST', headers: { Authorization: `Bearer ${ADMIN}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ topic: 'Agent path' }),
-  }).then(json)
   const browser = await chromium.launch()
   const [ann, bob] = [await person(browser), await person(browser)]
 
-  await join(ann, boot.url, 'ann')
+  await start(ann, 'ann', 'Agent path')
   const conv = new URL(ann.page.url()).pathname.split('/')[2]
   const link = await ann.page.evaluate((id) => fetch(`/api/convs/${id}/invites`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"link":true}' }).then((r) => r.json()), conv)
   await join(bob, link.url, 'bob')

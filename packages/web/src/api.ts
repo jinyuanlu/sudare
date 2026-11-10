@@ -56,6 +56,7 @@ const q = (params: Record<string, string | number | null | undefined>): string =
 
 export type Ceremony<O> = { id: string; options: O }
 export type Assertion = { id: string; response: unknown }
+export type Site = { signup: boolean; notice: string }
 export type JoinCheck = { valid: boolean; registered: boolean; topic: string | null; by: string | null; members: number }
 export type JoinCard = Omit<InviteView, 'suggested_handle'> & { suggested_handle: string | null; joined: boolean }
 export type Created = { conv: ConvId; existing: boolean; joined: number; invited: number }
@@ -76,6 +77,8 @@ export const api = {
   loginVerify: (a: Assertion) => post('/auth/login/verify', a, { anon: true }),
   registerOptions: (code: string) => post<Ceremony<PublicKeyCredentialCreationOptionsJSON>>('/auth/register/options', { code }, { anon: true }),
   registerVerify: (a: Assertion) => post('/auth/register/verify', a, { anon: true }),
+  site: () => get<Site>('/site', { anon: true }),
+  signup: () => post<{ code: string }>('/signup', {}, { anon: true }),
   logout: () => post('/auth/logout', {}, { anon: true }),
   passkeyOptions: () => post<Ceremony<PublicKeyCredentialCreationOptionsJSON>>('/passkeys/options'),
   passkeyVerify: (a: Assertion) => post('/passkeys/verify', a),

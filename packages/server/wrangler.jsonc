@@ -43,6 +43,12 @@
     "PLUGIN_SESSION_HOURS": "8",
     // Lifetime of a plugin session the person chose to keep across restarts; "0" forbids it.
     "PLUGIN_REMEMBER_HOURS": "168",
+    // "on" lets anyone create an account without an invitation (a public demo). Off: invitation only.
+    "OPEN_SIGNUP": "off",
+    // With open sign-up: the most accounts that may be created in any 24 hours.
+    "SIGNUP_DAILY_LIMIT": "500",
+    // One line shown on the sign-in pages and in Settings, e.g. "Demo server. Data may be wiped."
+    "SITE_NOTICE": "",
     "VAPID_SUBJECT": "",
     "VAPID_PUBLIC_KEY": ""
   }

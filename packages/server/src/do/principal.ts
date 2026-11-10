@@ -625,6 +625,13 @@ export class PrincipalDO extends DurableObject<Env> {
   }
 
   /** The complete inbox log as NDJSON pages. */
+  /** The operator erases the server: this person's inbox, drafts and sockets. The object is not used again. */
+  async wipe(): Promise<void> {
+    for (const ws of this.ctx.getWebSockets()) ws.close(1001, 'erased')
+    await this.ctx.storage.deleteAlarm()
+    await this.ctx.storage.deleteAll()
+  }
+
   async export(after: number, limit = 1000): Promise<{ lines: string[]; next: number | null }> {
     const rows = this.all<{ seq: number; ts: number; body: string }>(`SELECT seq, ts, body FROM log WHERE seq > ? ORDER BY seq LIMIT ?`, after, limit)
     return {

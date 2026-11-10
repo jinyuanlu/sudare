@@ -9,21 +9,35 @@ import { t } from '../i18n'
 import { confirmLink, registerWithInvite, signIn } from '../passkey'
 import { Link, navigate } from '../router'
 import { refresh } from '../store'
-import { ErrorNote, Field, Loading, QuickStart, Solo } from '../ui'
+import { ErrorNote, Field, Loading, QuickStart, Solo, useSite } from '../ui'
 import { fmtDate, isCode, membersText } from '../util'
 
 export const Login = ({ next, me }: { next: string; me: Me | null | undefined }) => {
   const act = useAction()
+  const open = useSite()?.signup ?? false
+  // A new account starts in a room of its own: the passkey first, then the name to use there.
+  const [fresh, setFresh] = useState<string | null>(null)
+  const signUp = async () => {
+    const { code } = await api.signup()
+    setFresh(code)
+    await registerWithInvite(code)
+  }
   // `next` may be a server-rendered page (OAuth consent): always a full page load.
-  useEffect(() => { if (me) location.replace(next) }, [me, next])
+  useEffect(() => { if (me) fresh ? navigate(`/j/${fresh}`, true) : location.replace(next) }, [me, next, fresh])
   return (
     <Solo title={t('login.title')}>
-      <p>{t('login.lead')}</p>
-      <button type="button" class="primary big" data-testid="signin" disabled={act.busy || !!me} onClick={() => void act.run(signIn)}>
-        {t('login.signin')}
+      <p>{t(open ? 'login.leadOpen' : 'login.lead')}</p>
+      {open ? (
+        <button type="button" class="primary big" data-testid="signup" disabled={act.busy || !!me} onClick={() => void act.run(signUp)}>
+          {t('login.create')}
+        </button>
+      ) : null}
+      <button type="button" class={open ? 'big' : 'primary big'} data-testid="signin" disabled={act.busy || !!me} onClick={() => void act.run(signIn)}>
+        {t(open ? 'join.have' : 'login.signin')}
       </button>
       <ErrorNote error={act.error} />
-      <p class="muted small">{t('login.nosignup')}</p>
+      <p class="muted small">{t(open ? 'join.passkeyHint' : 'login.nosignup')}</p>
+      {open ? <QuickStart /> : null}
     </Solo>
   )
 }

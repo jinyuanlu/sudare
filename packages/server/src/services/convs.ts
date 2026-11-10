@@ -7,7 +7,7 @@ import {
   type AliasRef, type ConvId, type EventId, type InviteId, type InvitePolicy, type PrincipalId, type Result, type WritePath,
 } from '@sudare/protocol'
 import { directory, type InviteRow } from '../directory'
-import { origin, type Env } from '../env'
+import { openSignup, origin, signupDailyLimit, type Env } from '../env'
 import { b64url, sha256 } from '../util'
 import { convStub, principalStub } from './stubs'
 
@@ -159,14 +159,34 @@ export const roomLink = async (env: Env, me: PrincipalId, conv: ConvId): Promise
 }
 
 /** The operator's one-time entry: a conversation that comes into being when its link is first accepted. */
-export const bootstrap = async (env: Env, topic: string): Promise<{ url: string; expires: number }> => {
+export const bootstrap = async (env: Env, topic: string, by = 'operator', ttl = WEEK): Promise<{ url: string; code: string; expires: number }> => {
   const code = b64url(crypto.getRandomValues(new Uint8Array(24)))
-  const expires = Date.now() + WEEK
+  const expires = Date.now() + ttl
   await directory(env).createInvite({
-    id: newInviteId(), code_hash: await sha256(code), conv: newConvId(), kind: 'bootstrap', by_principal: null, by_handle: 'operator',
+    id: newInviteId(), code_hash: await sha256(code), conv: newConvId(), kind: 'bootstrap', by_principal: null, by_handle: by,
     target: null, bootstrap_topic: topic, expires_at: expires,
   })
-  return { url: `${origin(env)}/j/${code}`, expires }
+  return { url: `${origin(env)}/j/${code}`, code, expires }
+}
+
+const HOUR = 3_600_000
+
+/**
+ * Open sign-up, where the operator turned it on: an invitation to a room of one's own,
+ * issued to whoever asks. Registration stays what it was, a side effect of holding an
+ * unused invitation; this only removes the need to know someone. Bounded per day, and
+ * by the number of unanswered offers, so that asking costs the server nothing lasting.
+ */
+export const signup = async (env: Env): Promise<Result<{ code: string }>> => {
+  if (!openSignup(env)) return err('not_found')
+  const now = Date.now()
+  const n = await env.DB.prepare(
+    `SELECT (SELECT count(*) FROM principals WHERE created_at > ?) AS people,
+            (SELECT count(*) FROM invites WHERE kind = 'bootstrap' AND by_principal IS NULL AND used_at IS NULL AND created_at > ?) AS offers`,
+  ).bind(now - 24 * HOUR, now - HOUR).first<{ people: number; offers: number }>()
+  const limit = signupDailyLimit(env)
+  if (!n || n.people >= limit || n.offers >= limit) return err('rate_limited')
+  return ok({ code: (await bootstrap(env, 'My first room', 'Sudare', HOUR)).code })
 }
 
 export const inviteByCode = async (env: Env, code: string): Promise<InviteRow | null> =>

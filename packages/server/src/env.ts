@@ -18,6 +18,9 @@ export type Env = {
   WEB_SESSION_HOURS: string
   PLUGIN_SESSION_HOURS: string
   PLUGIN_REMEMBER_HOURS?: string
+  OPEN_SIGNUP?: string
+  SIGNUP_DAILY_LIMIT?: string
+  SITE_NOTICE?: string
   VAPID_SUBJECT: string
   VAPID_PUBLIC_KEY: string
   VAPID_PRIVATE_KEY?: string
@@ -32,6 +35,10 @@ export const rememberHours = (env: Env): number => {
   const n = Number(env.PLUGIN_REMEMBER_HOURS ?? 168)
   return Number.isFinite(n) && n > 0 ? n : 0
 }
+
+/** Open sign-up: anyone may create an account without an invitation, up to a daily number. */
+export const openSignup = (env: Env): boolean => env.OPEN_SIGNUP === 'on'
+export const signupDailyLimit = (env: Env): number => hours(env.SIGNUP_DAILY_LIMIT, 500)
 
 export const hours = (value: string | undefined, fallback: number): number => {
   const n = Number(value)

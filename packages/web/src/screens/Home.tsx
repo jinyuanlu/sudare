@@ -2,7 +2,7 @@ import type { ConvSummary } from '@sudare/protocol'
 import { t } from '../i18n'
 import { Link } from '../router'
 import { useStore } from '../store'
-import { Badge, Loading } from '../ui'
+import { Badge, Loading, SiteNotice } from '../ui'
 import { fmtTime, membersText } from '../util'
 
 const NavItem = ({ href, label, n, active }: { href: string; label: string; n?: number; active: boolean }) => (
@@ -57,6 +57,7 @@ export const Home = ({ active, section }: { active: string | null; section: stri
           {convs.map((c) => <ConvItem key={c.id} c={c} active={c.id === active} />)}
         </ul>
       )}
+      <SiteNotice />
     </div>
   )
 }

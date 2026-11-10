@@ -1,5 +1,6 @@
 import type { ComponentChildren } from 'preact'
 import { useEffect, useRef, useState } from 'preact/hooks'
+import { api, type Site } from './api'
 import { t } from './i18n'
 import { Link } from './router'
 import { errText } from './util'
@@ -25,12 +26,27 @@ export const Page = ({ title, back = '/', sub, actions, children, wide }: PagePr
   </section>
 )
 
+let site: Promise<Site> | null = null
+/** What this server says about itself; asked once. */
+export const useSite = (): Site | null => {
+  const [s, set] = useState<Site | null>(null)
+  useEffect(() => { void (site ??= api.site().catch(() => ({ signup: false, notice: '' }))).then(set) }, [])
+  return s
+}
+
+/** The operator's one line about this server, where there is one. */
+export const SiteNotice = () => {
+  const notice = useSite()?.notice
+  return notice ? <p class="muted small site-notice" data-testid="site-notice">{notice}</p> : null
+}
+
 /** A full-screen card for the signed-out and one-purpose pages. */
 export const Solo = ({ title, children }: { title: string; children: ComponentChildren }) => (
   <main class="solo">
     <img src="/icon.svg" alt="" width="56" height="56" />
     <h1>{title}</h1>
     {children}
+    <SiteNotice />
   </main>
 )
 

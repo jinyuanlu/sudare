@@ -2,6 +2,7 @@
 //
 //   pnpm dev                              # in one terminal (http://localhost:8787)
 //   ADMIN_SECRET=... node e2e/smoke.cjs   # in another; needs `playwright` resolvable
+//                                         # (no secret needed where sign-up is open)
 //
 // Two people register through invitation links, talk, and the message arrives
 // live on the other side; then an addressed message is handed to an agent.
@@ -33,6 +34,23 @@ const join = async (who, url, handle) => {
   await who.page.getByTestId('composer').waitFor()
 }
 
+/** The first person: through open sign-up where the server has it, else through the operator's link. */
+const start = async (who, handle, topic) => {
+  const site = await fetch(`${ORIGIN}/api/site`).then((r) => r.json())
+  if (!site.signup) {
+    if (!ADMIN) throw new Error('set ADMIN_SECRET (this server has no open sign-up)')
+    const boot = await fetch(`${ORIGIN}/admin/bootstrap`, {
+      method: 'POST', headers: { Authorization: `Bearer ${ADMIN}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ topic }),
+    }).then((r) => r.json())
+    return join(who, boot.url, handle)
+  }
+  await who.page.goto(`${ORIGIN}/login`)
+  await who.page.getByTestId('signup').click()
+  await who.page.getByTestId('handle').fill(handle)
+  await who.page.getByTestId('join').click()
+  await who.page.getByTestId('composer').waitFor()
+}
+
 const say = async (who, text) => {
   await who.page.getByTestId('composer').fill(text)
   await who.page.getByTestId('send').click()
@@ -42,15 +60,10 @@ const say = async (who, text) => {
 const shot = (who, name) => (SHOTS ? who.page.screenshot({ path: `${SHOTS}/${name}.png` }) : null)
 
 ;(async () => {
-  if (!ADMIN) throw new Error('set ADMIN_SECRET')
-  const boot = await fetch(`${ORIGIN}/admin/bootstrap`, {
-    method: 'POST', headers: { Authorization: `Bearer ${ADMIN}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ topic: 'Cache plan' }),
-  }).then((r) => r.json())
-
   const browser = await chromium.launch()
   const [ann, bob] = [await person(browser), await person(browser)]
 
-  await join(ann, boot.url, 'ann')
+  await start(ann, 'ann', 'Cache plan')
   await say(ann, 'hello from ann')
   const conv = new URL(ann.page.url()).pathname.split('/')[2]
   const link = await ann.page.evaluate(
