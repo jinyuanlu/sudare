@@ -22,13 +22,25 @@ if [ ! -f "$CONFIG" ]; then
 
   HOST="${ORIGIN#https://}"; HOST="${HOST%%/*}"
 
-  echo "Creating the D1 database and the KV namespace..."
-  D1_OUT="$($W d1 create sudare 2>&1)" || { echo "$D1_OUT" >&2; exit 1; }
-  D1_ID="$(printf '%s' "$D1_OUT" | first_id '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}')"
-  KV_OUT="$($W kv namespace create OAUTH_KV 2>&1)" || { echo "$KV_OUT" >&2; exit 1; }
-  KV_ID="$(printf '%s' "$KV_OUT" | first_id '[0-9a-f]{32}')"
+  # Reuse what an earlier, interrupted run already created.
+  pick() { node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{const x=JSON.parse(s).find(o=>(o.name??o.title)===process.argv[1]);console.log(x?(x.uuid??x.id):'')}catch{console.log('')}})" "$1"; }
+
+  echo "Finding or creating the D1 database..."
+  D1_ID="$($W d1 list --json 2>/dev/null | pick sudare)"
+  if [ -z "$D1_ID" ]; then
+    D1_OUT="$($W d1 create sudare 2>&1)" || { echo "$D1_OUT" >&2; exit 1; }
+    D1_ID="$(printf '%s' "$D1_OUT" | first_id '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}')"
+  fi
+
+  echo "Finding or creating the KV namespace..."
+  KV_LIST="$($W kv namespace list 2>&1)" || { echo "$KV_LIST" >&2; echo "The API token needs the account permission \"Workers KV Storage: Edit\"." >&2; exit 1; }
+  KV_ID="$(printf '%s' "$KV_LIST" | pick OAUTH_KV)"
+  if [ -z "$KV_ID" ]; then
+    KV_OUT="$($W kv namespace create OAUTH_KV 2>&1)" || { echo "$KV_OUT" >&2; exit 1; }
+    KV_ID="$(printf '%s' "$KV_OUT" | first_id '[0-9a-f]{32}')"
+  fi
   if [ -z "$D1_ID" ] || [ -z "$KV_ID" ]; then
-    printf 'Could not read the new ids from wrangler. Its output was:\n%s\n%s\n' "$D1_OUT" "$KV_OUT" >&2
+    echo "Could not read the resource ids from wrangler." >&2
     echo "Copy wrangler.jsonc to $CONFIG, fill in the ids and PUBLIC_ORIGIN by hand, and run this again." >&2
     exit 1
   fi
