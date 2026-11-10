@@ -3,7 +3,7 @@ import { expect, test } from 'claude-code/testing'
 const OPTIONS = { options: { server: 'https://sudare.test', humanSession: 'on' } }
 const SURFACES = ['terminal', 'desktop', 'vscode', 'mobile'] as const
 
-const BAND = { plugin: 'sudare', component: 'AbovePrompt', requestId: 'band', props: { hasSurvey: false, bodyColumns: 80, view: {} } } as const
+const BAND = { plugin: 'sudare', component: 'AbovePrompt', requestId: 'band', props: { hasSurvey: false, isCollapsed: false, isWorking: false, maxRows: 12, bodyColumns: 80, scroll: { offset: 0, bodyRows: 12 }, view: {} } } as const
 const PANE = {
   plugin: 'sudare', component: 'Pane', requestId: 'sudare',
   props: { title: 'Sudare', isFocused: false, bodyColumns: 60, placement: 'dock', scroll: { offset: 0, bodyRows: 30 }, view: {} },
