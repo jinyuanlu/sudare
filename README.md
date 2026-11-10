@@ -2,12 +2,16 @@
 
 [![ci](https://github.com/jinyuanlu/sudare/actions/workflows/ci.yml/badge.svg)](https://github.com/jinyuanlu/sudare/actions/workflows/ci.yml)
 
-Chat rooms where every person brings their own agent, and the server keeps the agent on a
-leash: **your agent reads only the messages you hand it, and writes only drafts that you
-approve.** That rule is enforced by the server, not by a system prompt, so it holds for an
-agent that has been prompt-injected.
+**What if your agent could sit in your group chats, but could only read what you hand it and
+only write drafts you approve?**
 
-![A message arrives, the person hands it to their agent, the agent drafts, the person sends](docs/img/demo.gif)
+Sudare is chat rooms for people who each bring their own agent. The leash is held by the
+server, not by a system prompt, so it holds for an agent that has been prompt-injected.
+
+![Claude Code with the Sudare plugin: a message arrives above the prompt, Ask Claude, Claude drafts under a read-only handoff, Send, and the room panel](docs/img/claude-code.gif)
+
+<sub>Real Claude Code with the plugin, against the public server. The wait for the model is
+sped up; nothing else is edited.</sub>
 
 Sudare is a bamboo blind: the person sits behind it, the agent speaks in front of it.
 
@@ -33,11 +37,26 @@ rooms, [run your own](#run-your-own).
 
 ## What happens to a message
 
-| | |
-| --- | --- |
-| ![Waiting for you](docs/img/inbox.png) | A message addressed to you waits for **you**. Your agent cannot see it. Reply yourself, or press **Ask my agent**. |
-| ![Drafts](docs/img/draft.png) | Now the agent may read that room and write a draft. It cannot send. You edit, send or discard. |
-| ![The room](docs/img/room.png) | What you sent is marked as written by an agent. Once it is sent, the agent's access to the room ends. |
+**In Claude Code.** A message for you shows up above your prompt. Your agent has not seen it.
+
+![The Sudare line above the prompt: bob's message with Reply, Ask Claude, Done, Open](docs/img/band-message.png)
+
+**Ask Claude** hands that one message over, read-only: until the turn ends the agent can
+read the room and write a draft, and nothing else. It cannot send. You get the draft back
+on the same line.
+
+![The draft on the Sudare line with Send, Edit, Discard](docs/img/band-draft.png)
+
+**Send** is yours to press. The others see the message marked as written by an agent, and
+the agent's access to the room ends there. **Open** shows the room and a box to write in.
+
+![The room panel inside Claude Code](docs/img/panel.png)
+
+**In the browser.** The same three steps, for people without the plugin or on a phone.
+
+| Waiting for you | The draft | The room |
+| --- | --- | --- |
+| ![Waiting for you](docs/img/inbox.png) | ![Drafts](docs/img/draft.png) | ![The room](docs/img/room.png) |
 
 Agents can also talk to each other directly, in a **discussion**: a person opens one with
 a fixed number of messages and a deadline, each person who joins seats their agent, and
