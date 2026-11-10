@@ -628,9 +628,11 @@ export const register: Register = (on, options) => {
           </Box>
         )}
         {shown && (
-          <Input key={`say-${shown.conv}`} submitLabel="Send"
-            placeholder={picked ? `For ${picked.handle} (all can read)` : shown.others.length > 1 ? 'Message everyone' : shown.others.length === 1 ? `Message ${shown.others[0]!.handle}` : 'Write a message'}
-            onSubmit={(text) => void sayHere($, c, shown.conv, text, picked?.handle ?? null)} />
+          <Box borderStyle="round" borderColor="suggestion" paddingX={1} flexDirection="column">
+            <Input key={`say-${shown.conv}`} label="Message" submitLabel="Send"
+              placeholder={picked ? `Type here, for ${picked.handle} (all can read)` : shown.others.length > 1 ? 'Type here, to everyone' : shown.others.length === 1 ? `Type here, to ${shown.others[0]!.handle}` : 'Type here'}
+              onSubmit={(text) => void sayHere($, c, shown.conv, text, picked?.handle ?? null)} />
+          </Box>
         )}
         {others.length > 0 && (
           <Box flexDirection="column">
@@ -644,7 +646,9 @@ export const register: Register = (on, options) => {
         {snap.drafts.map((d) => (
           <Box key={`draft-${d.id}`} flexDirection="column">
             <Text dimColor>{d.device} · {d.kind}{d.topic ? ` · ${clip(d.topic, 30)}` : ''}</Text>
-            <Input key={`edit-${d.id}`} value={d.text} rows={3} submitLabel="Send" onSubmit={(text) => void post($, c, `/drafts/${d.id}/approve`, text === d.text ? {} : { text }, 'Sent.')} />
+            <Box borderStyle="round" borderColor="suggestion" paddingX={1} flexDirection="column">
+              <Input key={`edit-${d.id}`} label="Edit before sending" value={d.text} rows={3} submitLabel="Send" onSubmit={(text) => void post($, c, `/drafts/${d.id}/approve`, text === d.text ? {} : { text }, 'Sent.')} />
+            </Box>
             <Button key={`reject-${d.id}`} label="Discard" onPress={() => post($, c, `/drafts/${d.id}/reject`, {}, 'Discarded.')} />
           </Box>
         ))}
@@ -652,8 +656,10 @@ export const register: Register = (on, options) => {
         {rounds.map((x) => (
           <Box key={`round-${x.round}`} flexDirection="column">
             <Text>{clip(x.topic, 40)}</Text>
-            <Input key={`brief-${x.round}`} label="Instructions for my agent (only it sees this)" placeholder="what you want, where it may give way" rows={3} submitLabel="Take part with my agent"
-              onSubmit={(brief) => void post($, c, `/rounds/${x.round}/join`, { brief }, 'You are taking part. Press Start my agent above your prompt.')} />
+            <Box borderStyle="round" borderColor="suggestion" paddingX={1} flexDirection="column">
+              <Input key={`brief-${x.round}`} label="Instructions for my agent (only it sees this)" placeholder="what you want, where it may give way" rows={3} submitLabel="Take part with my agent"
+                onSubmit={(brief) => void post($, c, `/rounds/${x.round}/join`, { brief }, 'You are taking part. Press Start my agent above your prompt.')} />
+            </Box>
           </Box>
         ))}
         {shown && form.isOpen && (
@@ -668,7 +674,9 @@ export const register: Register = (on, options) => {
                 ))}
               </Box>
             )}
-            <Input key="new-topic" placeholder="What is it about?" submitLabel="Create" onSubmit={(topic) => void createFrom($, c, shown, form.people, topic)} />
+            <Box borderStyle="round" borderColor="suggestion" paddingX={1} flexDirection="column">
+              <Input key="new-topic" label="Room name" placeholder="What is it about?" submitLabel="Create" onSubmit={(topic) => void createFrom($, c, shown, form.people, topic)} />
+            </Box>
             <Button key="new-cancel" label="Cancel" onPress={() => update($, compose, () => ({ isOpen: false, people: [] }))} />
           </Box>
         )}

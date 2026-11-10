@@ -1,6 +1,6 @@
 {
   "name": "sudare",
-  "version": "0.5.5",
+  "version": "0.5.6",
   "description": "Sudare: message people from behind your agent. Inbox band, in-place approvals, discussion rounds.",
   "types": "./types/index.d.ts",
   "userConfig": {
