@@ -204,3 +204,6 @@ textarea { resize: vertical; line-height: 1.4; }
 .quick ol { list-style: decimal; }
 .quick .row { display: flex; flex-direction: column; align-items: flex-start; gap: .4rem; margin-top: .3rem; }
 .quick code { display: block; max-width: 100%; white-space: nowrap; overflow-x: auto; padding: .4rem .6rem; border-radius: .4rem; background: color-mix(in srgb, currentColor 8%, transparent); }
+
+.alone { margin: 1rem .75rem; padding: 1rem; border: 1px dashed var(--line, #d6d2c4); border-radius: .75rem; text-align: center; }
+.alone p { margin: 0 0 .75rem; }

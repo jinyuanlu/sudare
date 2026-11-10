@@ -13,18 +13,26 @@ const InviteSection = ({ view }: { view: ConvView }) => {
   const act = useAction()
   const [sent, setSent] = useState<string[]>([])
   const [link, setLink] = useState<InviteLink | null>(null)
-  const key = (c: ContactView) => `${c.conv}/${c.alias}`
-  // Aliases are per conversation, so "not already here" can only exclude the ones met in this very conversation.
-  const others = (contacts.data ?? []).filter((c) => c.conv !== view.id)
+  const pending = useLoad(() => api.pendingInvites(view.id), [view.id])
+  const key = (c: ContactView) => c.person
+  // One row per person, and nobody who is already in this room.
+  const here = new Set((contacts.data ?? []).filter((c) => c.conv === view.id).map((c) => c.person))
+  const others = [...new Map((contacts.data ?? []).filter((c) => !here.has(c.person)).map((c) => [c.person, c])).values()]
+  const waiting = new Set((pending.data ?? []).map((p) => p.name).filter((n): n is string => n !== null))
   const invite = (c: ContactView) => void act.run(async () => {
     await api.invite(view.id, { conv: c.conv, alias: c.alias })
     setSent((s) => [...s, key(c)])
+    pending.reload()
+  })
+  const withdraw = (id: string) => void act.run(async () => {
+    await api.withdrawInvite(view.id, id)
+    pending.reload()
   })
   return (
     <section>
       <h3>{t('members.invite')}</h3>
       <div class="row">
-        <button type="button" disabled={act.busy} onClick={() => void act.run(async () => setLink(await api.inviteLink(view.id)))}>{t('members.link')}</button>
+        <button type="button" class="primary" disabled={act.busy} onClick={() => void act.run(async () => { setLink(await api.inviteLink(view.id)); pending.reload() })}>{t('members.link')}</button>
       </div>
       {link ? (
         <div class="once">
@@ -34,6 +42,16 @@ const InviteSection = ({ view }: { view: ConvView }) => {
         </div>
       ) : null}
       <ErrorNote error={act.error} />
+      {(pending.data ?? []).length > 0 ? (
+        <ul class="rows" aria-label={t('members.pending')}>
+          {(pending.data ?? []).map((p) => (
+            <li key={p.id}>
+              <span>{p.kind === 'link' ? t('members.pendingLink') : (p.name ?? t('members.pendingSomeone'))} <span class="muted small">· {t('members.pending')}</span></span>
+              {p.mine ? <button type="button" class="link" disabled={act.busy} onClick={() => withdraw(p.id)}>{t('members.withdraw')}</button> : null}
+            </li>
+          ))}
+        </ul>
+      ) : null}
       {contacts.loading && !contacts.data ? <Loading /> : null}
       <ErrorNote error={contacts.error} />
       {contacts.data && others.length === 0 ? <p class="muted small">{t('members.noContacts')}</p> : null}
@@ -41,7 +59,7 @@ const InviteSection = ({ view }: { view: ConvView }) => {
         {others.map((c) => (
           <li key={key(c)}>
             <span>{c.handle} <span class="muted small">· {c.topic}</span></span>
-            {sent.includes(key(c))
+            {sent.includes(key(c)) || waiting.has(c.handle)
               ? <span class="muted small">{t('members.invited')}</span>
               : <button type="button" disabled={act.busy} onClick={() => invite(c)}>{t('members.inviteOne')}</button>}
           </li>

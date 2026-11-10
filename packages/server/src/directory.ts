@@ -71,8 +71,8 @@ export const directory = (env: Env) => {
     releaseDm: (conv: ConvId) => run(db, `DELETE FROM convs WHERE id = ? AND topic = ''`, conv),
     /** Everyone who currently shares a conversation with `p`: the only people `p` can name. */
     contacts: (p: PrincipalId) =>
-      all<{ conv: ConvId; alias: AliasId; handle: string; topic: string }>(db,
-        `SELECT other.conv AS conv, other.alias AS alias, other.handle AS handle, c.topic AS topic
+      all<{ conv: ConvId; alias: AliasId; handle: string; topic: string; principal: PrincipalId }>(db,
+        `SELECT other.conv AS conv, other.alias AS alias, other.handle AS handle, c.topic AS topic, other.principal AS principal
          FROM aliases mine JOIN aliases other ON other.conv = mine.conv AND other.principal != mine.principal AND other.left_at IS NULL
          JOIN convs c ON c.id = mine.conv
          WHERE mine.principal = ? AND mine.left_at IS NULL AND c.archived_at IS NULL ORDER BY c.created_at DESC, other.handle`, p),
@@ -91,6 +91,8 @@ export const directory = (env: Env) => {
     consumeInvite: (id: InviteId, p: PrincipalId) =>
       run(db, `UPDATE invites SET used_at = ?, used_by = ? WHERE id = ? AND used_at IS NULL AND declined_at IS NULL AND expires_at > ?`, Date.now(), p, id, Date.now()),
     releaseInvite: (id: InviteId, p: PrincipalId) => run(db, `UPDATE invites SET used_at = NULL, used_by = NULL WHERE id = ? AND used_by = ?`, id, p),
+    pendingInvites: (conv: ConvId) =>
+      all<InviteRow>(db, `SELECT * FROM invites WHERE conv = ? AND kind IN ('direct', 'link') AND used_at IS NULL AND declined_at IS NULL AND expires_at > ? ORDER BY created_at`, conv, Date.now()),
     declineInvite: (id: InviteId) => run(db, `UPDATE invites SET declined_at = ? WHERE id = ? AND used_at IS NULL AND declined_at IS NULL`, Date.now(), id),
 
     // housekeeping

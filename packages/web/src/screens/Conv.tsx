@@ -127,11 +127,17 @@ export const ConvScreen = ({ id, at }: { id: ConvId; at: number | null }) => {
     <Page
       wide title={view.topic}
       sub={<button type="button" class="link" onClick={() => setPanel('members')}>{t('common.members', { n: active.length })} · {t('conv.hereNow', { n: active.filter((m) => m.active).length })}{view.archived ? ` · ${t('home.archived')}` : ''}</button>}
-      actions={<><Link class="button" href={`/c/${id}/notes`}>{t('notes.title')}</Link><Menu view={view} openRound={round !== null} onPanel={setPanel} onError={setFailure} /></>}
+      actions={<>{view.can_invite && !view.archived ? <button type="button" onClick={() => setPanel('members')}>{t('conv.invite')}</button> : null}<Link class="button" href={`/c/${id}/notes`}>{t('notes.title')}</Link><Menu view={view} openRound={round !== null} onPanel={setPanel} onError={setFailure} /></>}
     >
       <div class="conv">
         {showQuick ? <QuickStart onDismiss={() => { localStorage.setItem('sudare.quick', 'hidden'); setShowQuick(false) }} /> : null}
         <ErrorNote error={failure} />
+        {active.length === 1 && view.can_invite && !view.archived ? (
+          <div class="alone">
+            <p>{t('conv.alone')}</p>
+            <button type="button" class="primary" onClick={() => setPanel('members')}>{t('conv.inviteSomeone')}</button>
+          </div>
+        ) : null}
         {round ? <RoundBanner view={view} round={round} name={name} onChanged={conv.reload} /> : null}
         <Timeline view={view} tl={tl} name={name} focus={at} onReply={writable ? setReply : null} onBottom={setAtBottom} />
         {writable ? (

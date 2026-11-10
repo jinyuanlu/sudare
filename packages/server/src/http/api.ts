@@ -244,7 +244,13 @@ api.post('/push/unsubscribe', web, async (c) => {
 
 api.get('/convs', anyHuman, async (c) => c.json(await inbox(c).convs()))
 
-api.get('/contacts', anyHuman, async (c) => c.json(await directory(c.env).contacts(me(c))))
+/** The same person met in several rooms gets the same key, so clients can list them once. It means nothing to anyone else. */
+const personKey = async (viewer: PrincipalId, other: PrincipalId): Promise<string> => (await sha256(`${viewer}|${other}`)).slice(0, 12)
+
+const contactsOf = async (c: C) =>
+  Promise.all((await directory(c.env).contacts(me(c))).map(async ({ principal, ...row }) => ({ ...row, person: await personKey(me(c), principal) })))
+
+api.get('/contacts', anyHuman, async (c) => c.json(await contactsOf(c)))
 
 api.post('/convs', anyHuman, async (c) => {
   const input = await body(c, z.object({
@@ -287,6 +293,24 @@ api.post('/convs/:id/invites', anyHuman, async (c) => {
   return 'to' in input
     ? send(c, await inviteMember(c.env, me(c), id, input.to as AliasRef).then((r) => (r.ok ? ok({ invite: r.value }) : r)), 201)
     : send(c, await inviteLink(c.env, me(c), id), 201)
+})
+
+/** Invitations to this room that nobody has answered yet. Members see that they exist; names only where the viewer knows the person. */
+api.get('/convs/:id/invites', anyHuman, async (c) => {
+  const id = param(c, 'id', isConvId)
+  if (!(await conv(c, id).isMember(me(c)))) return fail('not_member')
+  const [pending, known] = await Promise.all([directory(c.env).pendingInvites(id), directory(c.env).contacts(me(c))])
+  const nameOf = (p: PrincipalId | null) => known.find((k) => k.principal === p)?.handle ?? null
+  return c.json(pending.map((i) => ({ id: i.id, kind: i.kind, name: i.kind === 'direct' ? nameOf(i.target) : null, expires: i.expires_at, mine: i.by_principal === me(c) })))
+})
+
+/** The person who sent an invitation can withdraw it while it is unanswered. */
+api.delete('/convs/:id/invites/:invite', anyHuman, async (c) => {
+  const i = await directory(c.env).invite(param(c, 'invite', isInviteId))
+  if (!i || i.conv !== param(c, 'id', isConvId) || i.by_principal !== me(c) || i.used_at !== null) return fail('invite_invalid')
+  await directory(c.env).declineInvite(i.id)
+  if (i.target) await principalStub(c.env, i.target).inviteClosed(i.id)
+  return c.json({})
 })
 
 const simple = (t: 'leave' | 'archive') => async (c: C) => {

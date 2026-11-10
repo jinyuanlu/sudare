@@ -25,7 +25,8 @@ export const NewScreen = ({ parent: rawParent }: { parent: string | null }) => {
   const needHandle = !parent && !me?.default_handle
 
   // People from the parent conversation first: they can join without an invitation.
-  const all = [...(contacts.data ?? [])].sort((a, b) => Number(b.conv === parent) - Number(a.conv === parent))
+  const sorted = [...(contacts.data ?? [])].sort((a, b) => Number(b.conv === parent) - Number(a.conv === parent))
+  const all = [...new Map(sorted.reverse().map((c) => [c.person, c])).values()].reverse() // one row per person, preferring the one from the parent room
   const shown = all.filter((c) => `${c.handle} ${c.topic}`.toLowerCase().includes(filter.trim().toLowerCase()))
   const toggle = (k: string, on: boolean) => setPicked((p) => (on ? [...p, k] : p.filter((x) => x !== k)))
 

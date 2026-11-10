@@ -73,6 +73,28 @@ describe('membership over time', () => {
     expect((await eve.post(`/convs/${conv}/invites`, { link: true })).body.error).toBe('not_member')
   })
 
+  it('shows unanswered invitations to members, lets the sender withdraw one, and lists a person once', async () => {
+    const { who: ann, conv } = await founder()
+    const bob = await invite(ann, conv, 'bob')
+    const side = (await ann.post('/convs', { topic: 'Side', parent: conv, members: [{ conv, alias: ((await ann.get(`/convs/${conv}`)).body.members as any[]).find((m) => m.handle === 'bob').alias }] })).body.conv as ConvId
+    const contacts = (await ann.get('/contacts')).body as any[]
+    expect(contacts.filter((c) => c.handle === 'bob')).toHaveLength(2) // met in two rooms
+    expect(new Set(contacts.filter((c) => c.handle === 'bob').map((c) => c.person)).size).toBe(1) // one person
+    expect(JSON.stringify(contacts)).not.toMatch(/p_[0-9A-Z]{26}/)
+
+    const solo = (await ann.post('/convs', { topic: 'Solo' })).body.conv as ConvId
+    const sent = await ann.post(`/convs/${solo}/invites`, { to: { conv, alias: contacts.find((c) => c.handle === 'bob' && c.conv === conv).alias } })
+    await ann.post(`/convs/${solo}/invites`, { link: true })
+    const pending = (await ann.get(`/convs/${solo}/invites`)).body as any[]
+    expect(pending.map((p) => [p.kind, p.name, p.mine])).toEqual([['direct', 'bob', true], ['link', null, true]])
+    expect((await bob.get(`/convs/${solo}/invites`)).body.error).toBe('not_member')
+    expect((await bob.del(`/convs/${solo}/invites/${sent.body.invite}`)).body.error).toBe('invite_invalid')
+    expect((await ann.del(`/convs/${solo}/invites/${sent.body.invite}`)).status).toBe(200)
+    expect((await bob.post(`/invites/${sent.body.invite}/accept`, {})).body.error).toBe('invite_invalid')
+    await eventually(async () => (await bob.get('/invites')).body.length === 0, 'withdrawn invitation disappears')
+    expect(side).toBeTruthy()
+  })
+
   it('respects a creator-only invitation policy', async () => {
     const { who: ann, conv } = await founder()
     const bob = await invite(ann, conv, 'bob')

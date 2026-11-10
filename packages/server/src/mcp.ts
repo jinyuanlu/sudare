@@ -91,7 +91,8 @@ const resolveContacts = async (a: Agent, members: { handle: string; conv?: ConvI
     if (hits.length === 0) return err('recipient_unknown', { handle: m.handle })
     // The same handle in several conversations may or may not be one person;
     // the agent is not told which. It asks its human to pick the conversation.
-    if (hits.length > 1) return err('ambiguous_member', { handle: m.handle, candidates: hits.map((h) => ({ handle: h.handle, conv: h.conv, untrusted_topic: h.topic })) })
+    const people = new Set(hits.map((h) => h.principal))
+    if (people.size > 1) return err('ambiguous_member', { handle: m.handle, candidates: hits.map((h) => ({ handle: h.handle, conv: h.conv, untrusted_topic: h.topic })) })
     refs.push({ conv: hits[0]!.conv, alias: hits[0]!.alias })
   }
   return ok(refs)

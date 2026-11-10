@@ -4,7 +4,7 @@ import {
   ERROR_CODES,
   type AliasId, type AliasRef, type ContactView, type ConvEvent, type ConvId, type ConvSummary, type ConvView, type DeviceId,
   type DeviceView, type DraftId, type DraftView, type ErrorCode, type EventId, type EventsResponse, type HandoffMode,
-  type InboxItem, type InviteId, type InviteView, type Me, type NoteId, type NoteView, type RoundId, type SearchHit, type SyncResponse,
+  type InboxItem, type InviteId, type PendingInvite, type InviteView, type Me, type NoteId, type NoteView, type RoundId, type SearchHit, type SyncResponse,
 } from '@sudare/protocol'
 import type { PublicKeyCredentialCreationOptionsJSON, PublicKeyCredentialRequestOptionsJSON } from '@simplewebauthn/browser'
 
@@ -90,6 +90,8 @@ export const api = {
 
   convs: () => get<ConvSummary[]>('/convs'),
   contacts: () => get<ContactView[]>('/contacts'),
+  pendingInvites: (id: ConvId) => get<PendingInvite[]>(`/convs/${id}/invites`),
+  withdrawInvite: (id: ConvId, invite: string) => request<Record<string, never>>('DELETE', `/convs/${id}/invites/${invite}`),
   createConv: (input: NewConv) => post<Created>('/convs', input),
   conv: (id: ConvId) => get<ConvView>(`/convs/${id}`),
   patchConv: (id: ConvId, patch: { topic?: string; retention_days?: number }) => request<ConvView>('PATCH', `/convs/${id}`, patch),
