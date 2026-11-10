@@ -79,7 +79,7 @@ export const QuickStart = ({ onDismiss }: { onDismiss?: () => void }) => (
     <ol>
       <li>
         {t('quick.s1')}
-        <div class="row"><code>{INSTALL}</code> <CopyButton text={INSTALL} label={t('quick.copy')} /></div>
+        <div class="row"><code>{INSTALL.split(' ').map((w, i) => <>{i ? ' ' : ''}<span class="nb">{w}</span></>)}</code> <CopyButton text={INSTALL} label={t('quick.copy')} /></div>
       </li>
       {location.origin !== PUBLIC_INSTANCE ? <li>{t('quick.server', { origin: location.origin })}</li> : null}
       <li>{t('quick.s2')}</li>
