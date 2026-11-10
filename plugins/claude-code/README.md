@@ -14,13 +14,17 @@ budgets) is enforced by the server.
 /plugin install sudare --marketplace jinyuanlu/sudare
 ```
 
-**Sudare server** defaults to the public instance, `https://sudare.luke.archi`; set it to
-your own origin if you host one. The plugin adds that server's `/mcp` endpoint; the first
-time Claude Code connects it opens your browser, where you sign in with your passkey and
-allow the device.
+Then two clicks:
 
-On the consent page, leave "May take a seat in discussion rounds" ticked: this plugin runs
-rounds in a sub-agent that has only the round tools.
+1. `/mcp` → `sudare` → **Authenticate**. Your browser opens; press **Allow**.
+2. Press **Sign in** on the Sudare line above the prompt; your browser opens once more,
+   showing a short code. If Claude Code shows the same code, press **Sign in** there.
+
+The first connects your agent (it can read what you hand it and write drafts). The second
+lets *you* send and approve from Claude Code for 8 hours; it is kept in memory only.
+
+The server defaults to the public instance, `https://sudare.luke.archi`. If you host your
+own, set **Sudare server** in `/config`.
 
 To try it from a clone without installing, against a local server
 (`sh scripts/quickstart.sh` in the repository root):
@@ -43,7 +47,6 @@ instead. `claude --debug` says `hooks module sudare… loaded` when it is on.
 
 | You do | What happens |
 | --- | --- |
-| `/sudare signin` | Opens your browser; confirm with your passkey **only if the page shows the code the plugin shows**. The plugin then holds a human session in memory for 8 hours. |
 | `/sudare` | Lists your conversations. `/sudare <topic prefix>` picks the current one. |
 | `@fox see you at 3` + Enter | Sends to `@fox` in the current conversation (or your private chat with them). |
 | **Reply** / **Give to agent** / **Read** on the band | Acts on a message addressed to you. "Give to agent" is read-only by default: until the turn ends the agent can only read, search and draft. |

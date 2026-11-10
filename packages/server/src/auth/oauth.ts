@@ -62,9 +62,14 @@ export const firstPartyClient = (env: Env) => ({
   token_endpoint_auth_method: 'none',
 })
 
-/** Clients trusted to run a discussion round in a tool-restricted sub-session. */
-export const roundCapableByDefault = (env: Env, clientId: string): boolean =>
-  [`${origin(env)}${FIRST_PARTY_CLIENT}`, ...csv(env.ROUND_CLIENT_IDS)].includes(clientId)
+/**
+ * Clients trusted to run a discussion round in a tool-restricted sub-session:
+ * our own plugin client, Claude Code (recognised by the verified domain of its
+ * client metadata document), and whatever the operator lists by client id or
+ * domain. The person can change this per device in Settings.
+ */
+export const roundCapableByDefault = (env: Env, clientId: string, clientDomain?: string): boolean =>
+  [`${origin(env)}${FIRST_PARTY_CLIENT}`, 'claude.ai', ...csv(env.ROUND_CLIENT_IDS)].some((x) => x === clientId || x === clientDomain)
 
 /**
  * Authorization-code phishing: someone sends a person a link to this consent
@@ -101,31 +106,23 @@ const page = (title: string, body: string, headers = new Headers(), status = 200
   label { display: block; margin: .75rem 0 .25rem; } input[type=text] { width: 100%; box-sizing: border-box; padding: .5rem; font: inherit; }
   button { font: inherit; padding: .55rem 1.1rem; border-radius: .4rem; border: 1px solid currentColor; background: none; color: inherit; cursor: pointer; }
   button.primary { background: #1f4fd8; border-color: #1f4fd8; color: #fff; } .row { display: flex; gap: .75rem; margin-top: 1.25rem; }
-  .warn { border-color: #c2410c; }
+  .warn { border-color: #c2410c; } h1 { margin-bottom: .25rem; } form { margin-top: 1.5rem; }
 </style><body>${body}</body></html>`, { status, headers })
 }
 
-const consentPage = (env: Env, d: ConsentDescription, handle: string, capable: boolean): string => `
-<h1>Connect an agent to your Sudare account?</h1>
-<div class="box">
-  <strong>${esc(d.clientName)}</strong>
-  <div class="muted">${d.clientDomain ? `Published by ${esc(d.clientDomain)}.` : 'This app registered itself; its name is not verified.'}</div>
-  <div class="muted">Access will be sent to <strong>${esc(d.redirectHost)}</strong>${d.redirectIsLoopback ? ' (an app on this computer)' : ''}.</div>
-</div>
-${d.redirectIsLoopback ? `<p class="muted">Continue only if you just started connecting an agent on this computer yourself.</p>` : ''}
-<p>The agent will be able to read conversations you hand off to it and write <em>drafts</em>. It cannot send, approve, or read anything else.</p>
+const consentPage = (d: ConsentDescription, handle: string): string => `
+<h1>Connect ${esc(d.clientName)}?</h1>
+<p>It can read what you hand to it and write drafts. Nothing is sent until you approve it.</p>
 <form method="post" action="/authorize">
   <input type="hidden" name="handle" value="${esc(handle)}">
-  <label for="name">Device name</label>
+  <label for="name">Name this device</label>
   <input id="name" type="text" name="name" maxlength="60" value="${esc(d.clientName.slice(0, 60))}">
-  <label><input type="checkbox" name="rounds" value="1"${capable ? ' checked' : ''}>
-    May take a seat in discussion rounds <span class="muted">(only for agents that run rounds in a tool-restricted sub-session, such as Claude Code with the Sudare plugin)</span></label>
   <div class="row">
     <button class="primary" name="decision" value="approve">Allow</button>
-    <button name="decision" value="deny">Deny</button>
+    <button name="decision" value="deny">Cancel</button>
   </div>
 </form>
-<p class="muted">${esc(new URL(origin(env)).host)}</p>`
+<p class="muted">${d.clientDomain ? `Verified: ${esc(d.clientDomain)}` : 'Unverified app'} · on ${d.redirectIsLoopback ? 'this computer' : esc(d.redirectHost)}</p>`
 
 const failure = (error: unknown): Response => {
   if (error instanceof AuthorizationError && error.redirectTo) return Response.redirect(error.redirectTo, 302)
@@ -153,7 +150,7 @@ export const authorizeGet = async (request: Request, env: Env): Promise<Response
       return Response.redirect(`${origin(env)}/login?next=${encodeURIComponent(url.pathname + url.search)}`, 302)
     }
     const consent = await oauth.beginConsent(auth)
-    return page(`Authorize ${details.clientName}`, consentPage(env, details, consent.handle, roundCapableByDefault(env, auth.clientId)), consent.headers)
+    return page(`Authorize ${details.clientName}`, consentPage(details, consent.handle), consent.headers)
   } catch (error) {
     return failure(error)
   }
@@ -181,7 +178,7 @@ export const authorizePost = async (request: Request, env: Env): Promise<Respons
     const name = String(form.get('name') ?? '').trim().slice(0, 60) || details.clientName.slice(0, 60)
     await directory(env).createDevice({
       id: device, principal: session.principal, kind: 'oauth', name, client_id: approved.request.clientId,
-      client_name: details.clientName.slice(0, 120), rounds: form.get('rounds') === '1' ? 1 : 0, token_hash: null,
+      client_name: details.clientName.slice(0, 120), rounds: roundCapableByDefault(env, approved.request.clientId, details.clientDomain) ? 1 : 0, token_hash: null,
       created_at: Date.now(), expires_at: Date.now() + THIRTY_DAYS * 1000,
     })
     const { redirectTo } = await oauth.completeAuthorization({

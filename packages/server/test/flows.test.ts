@@ -445,12 +445,13 @@ describe('devices and OAuth', () => {
     const page = await raw(`/authorize?${query}`, { headers: { Cookie: bob.cookie } })
     const html = await page.text()
     expect(html).toContain('Test Agent')
-    expect(html).toContain('127.0.0.1')
+    expect(html).toContain('this computer')
+    expect(html).toContain('Unverified app')
     const handle = /name="handle" value="([^"]+)"/.exec(html)![1]!
     const consentCookie = (page.headers.get('Set-Cookie') ?? '').split(';')[0]!
     const decide = (cookie: string, origin: string) => raw('/authorize', {
       method: 'POST', headers: { Cookie: cookie, Origin: origin, 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ handle, decision: 'approve', name: 'laptop', rounds: '1' }).toString(),
+      body: new URLSearchParams({ handle, decision: 'approve', name: 'laptop', rounds: '1' }).toString(), // `rounds` from the form is ignored
     })
     expect((await decide(`${bob.cookie}; ${consentCookie}`, 'https://evil.example')).status).toBe(403)
     expect((await decide(consentCookie, ORIGIN)).status).toBe(403) // no human session
@@ -470,7 +471,7 @@ describe('devices and OAuth', () => {
 
     const devices = (await bob.get('/devices')).body as any[]
     expect(devices).toHaveLength(1)
-    expect(devices[0]).toMatchObject({ name: 'laptop', kind: 'oauth', client: 'Test Agent', rounds: true })
+    expect(devices[0]).toMatchObject({ name: 'laptop', kind: 'oauth', client: 'Test Agent', rounds: false }) // an unverified app is not trusted with round seats
     const agent = mcpClient(devices[0].id, token.access_token)
     await bob.post(`/inbox/${msg}/handoff`, {})
     expect((await agent.tool('inbox')).data.messages).toHaveLength(1)

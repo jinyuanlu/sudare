@@ -274,8 +274,17 @@ export const register: Register = (on, options) => {
     if (pending) {
       return (
         <Box flexDirection="column">
-          <Text>簾 Confirm in your browser only if it shows the code <Text bold>{pending.code}</Text></Text>
+          <Text>簾 Sign in from your browser. Code: <Text bold>{pending.code}</Text></Text>
           <Text dimColor>{pending.url}</Text>
+        </Box>
+      )
+    }
+    if (!isIn) {
+      return (
+        <Box>
+          <Text dimColor>簾 Sudare </Text>
+          <Button key="signin" label="Sign in" onPress={async () => void (await say($, await signIn($, c, allowHuman)))} />
+          {note && <Text dimColor> {note}</Text>}
         </Box>
       )
     }
@@ -283,7 +292,7 @@ export const register: Register = (on, options) => {
     const draft = snap.drafts[0]
     const invite = snap.invites[0]
     const seat = snap.seats.find((s) => !s.isSeated)
-    if (!isIn || (!item && !draft && !invite && !seat && !note)) return next(e)
+    if (!item && !draft && !invite && !seat && !note) return next(e)
     const topic = snap.convs.find((x) => x.id === here)?.topic
 
     return (

@@ -57,7 +57,7 @@ const enrol = async (who) => {
   // The person is signed in already, so the consent page shows directly.
   await who.page.goto(`${meta.authorization_endpoint}?${query}`)
   await who.page.getByText('E2E Agent').first().waitFor()
-  await who.page.getByLabel('Device name').fill('e2e laptop')
+  await who.page.getByLabel('Name this device').fill('e2e laptop')
   await who.page.getByRole('button', { name: 'Allow' }).click()
   const back = await Promise.race([got, new Promise((_, no) => setTimeout(() => no(new Error('no OAuth callback')), 15_000))]).catch(async (e) => {
     throw new Error(`${e.message}; the browser is at ${who.page.url()} showing: ${(await who.page.innerText('body')).slice(0, 300)}`)
