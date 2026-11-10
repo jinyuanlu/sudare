@@ -26,7 +26,6 @@ VARIABLES
     session,     \* people holding a live human session
     ceremonies,  \* ghost: passkey ceremonies performed, per person
     tokens,      \* <<p, d>>: agent tokens in existence
-        \* devices allowed to take round seats
     members,     \* current members of the conversation
     item,        \* state of the message addressed to each person
     claims,      \* <<p, d>>: device d holds the claim on p's message
