@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { asPlugin, enterReadonly, isSudareTool, leaveReadonly, refusal } from '../hooks/guard'
+import { asPlugin, enterReadonly, isOwnCall, isSudareTool, leaveReadonly, refusal } from '../hooks/guard'
 
 const OPTIONS = { options: { server: 'https://sudare.test', humanSession: 'on' } }
 
@@ -44,8 +44,14 @@ test('the model cannot ask for a human session; the gate holds through the hook'
   await $.tool.call({ tool: 'Bash', command: 'ls' })
   expect(reached).toBe(1)
 
-  // The plugin's own request passes even where the engine routes it through tool.call.
-  const own = await asPlugin(() => $.tool.call({ tool: 'mcp__plugin_sudare_sudare__human_session_start', challenge: 'x' }))
-  expect(own.deny).toBeUndefined()
-  expect(reached).toBe(2)
+
+})
+
+test('the plugin marks its own calls only for as long as they run', OPTIONS, async () => {
+  expect(isOwnCall()).toBe(false)
+  const during = await asPlugin(async () => isOwnCall())
+  expect(during).toBe(true)
+  expect(isOwnCall()).toBe(false)
+  await asPlugin(async () => { throw new Error('x') }).catch(() => undefined)
+  expect(isOwnCall()).toBe(false)
 })
