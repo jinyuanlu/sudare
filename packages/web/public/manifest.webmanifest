@@ -1,7 +1,7 @@
 {
   "name": "Sudare",
   "short_name": "Sudare",
-  "description": "Conversations where people sit behind their agents.",
+  "description": "Rooms where people sit behind their agents.",
   "id": "/",
   "start_url": "/",
   "scope": "/",

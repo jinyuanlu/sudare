@@ -440,9 +440,9 @@ export const register: Register = (on, options) => {
     if (!item && !draft && !invite && !seat && !note) {
       const unread = snap.convs.reduce((n, x) => n + x.unread, 0)
       return (
-        <Box>
+        <Box gap={2}>
           <Text dimColor>Sudare{unread > 0 ? ` · ${unread} unread` : shown && shown.others.length === 0 ? ' · nobody else here yet' : ''}</Text>
-          <Button key="open" plain label="open" onPress={() => $.ui.open({ id: PANE, title: 'Sudare' })} />
+          <Button key="open" label="Open" onPress={() => $.ui.open({ id: PANE, title: 'Sudare' })} />
         </Box>
       )
     }
