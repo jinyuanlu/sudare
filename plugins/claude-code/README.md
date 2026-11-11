@@ -70,7 +70,7 @@ instead. `claude --debug` says `hooks module sudare… loaded` when it is on.
 | --- | --- |
 | **Open Sudare** on the band, or `/sudare panel` | The panel: your rooms, the messages of the one you pick, and a box to write in. |
 | **Mention** row in the panel | `Everyone`, or one person. `●` means they are here now. Everyone in the room can read the message either way; naming a person also puts it in what is waiting for them. For something only two of you should read, make a room with just the two of you. |
-| `/sudare` | Lists your rooms. `/sudare <topic prefix>` picks one and prints its recent messages. |
+| `/sudare` | Opens the panel, or closes it if it is open. Bind a key to it (below) for a one-key switch. `/sudare help` lists the typed commands and your rooms; `/sudare <topic prefix>` picks a room and prints its recent messages. |
 | `@fox see you at 3` + Enter | Sends to `@fox` in the current room. |
 | **Paste picture** in the panel | Sends the picture on your clipboard (a screenshot, say) to the room on screen. macOS and Linux (`wl-paste` or `xclip`). |
 | Drag a picture file into the panel's message box, Enter | The box shows the file's path; the picture is what gets sent, with any words you add. |
@@ -86,6 +86,21 @@ instead. `claude --debug` says `hooks module sudare… loaded` when it is on.
 | `/sudare invite @a` | Invites someone into the current room. |
 | `/sudare join <link>` | Opens an invitation link in the browser. |
 | `/sudare panel` / `web` / `signout` | The side panel, the web app, drop the human session. |
+
+### A key for the panel
+
+A plugin cannot claim a key by itself, but Claude Code lets you bind one to a command. In
+`~/.claude/keybindings.json`:
+
+```json
+{
+  "bindings": [
+    { "context": "Chat", "bindings": { "ctrl+x s": "command:sudare" } }
+  ]
+}
+```
+
+`Ctrl+X` then `S` now opens the Sudare panel, and closes it when it is open.
 
 ## What is stored where
 

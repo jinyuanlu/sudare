@@ -344,6 +344,14 @@ async function showPanel($: Engine, isFocused = false): Promise<void> {
   await $.ui.scroll({ in: PANE, to: 'end' }).catch(() => undefined)
 }
 
+/** Open the panel if it is closed, close it if it is open: what one key bound to /sudare does. */
+async function togglePanel($: Engine): Promise<'opened' | 'closed'> {
+  const isOpen = (await $.ui.panes().catch(() => [])).some((p) => p.id === PANE && p.isShown)
+  if (isOpen) await $.ui.close({ id: PANE })
+  else await showPanel($, true)
+  return isOpen ? 'closed' : 'opened'
+}
+
 async function leaveConv($: Engine, c: Client, conv: string, topic: string): Promise<void> {
   await update($, leaving, () => null)
   if (!(await post($, c, `/convs/${conv}/leave`, {}, `Left "${clip(topic, 40)}".`))) return
@@ -589,9 +597,9 @@ export const register: Register = (on, options) => {
     }
     if (verb === 'web') return { text: (await c.open(c.base)) ? 'Opened Sudare in your browser.' : `Open ${c.base}` }
     if (verb === 'join') return { text: (await c.open(rest[0] ?? c.base)) ? 'Opened the invitation in your browser; confirm there.' : `Open ${rest[0] ?? c.base}` }
-    if (verb === 'panel') {
-      await showPanel($)
-      return { text: 'Sudare panel opened.' }
+    // Bare /sudare is the switch for the panel, so that one key bound to it opens and closes it.
+    if (verb === 'panel' || verb === '') {
+      return { text: (await togglePanel($)) === 'opened' ? 'Sudare panel open. /sudare again closes it; /sudare help lists the typed commands.' : 'Sudare panel closed.' }
     }
     if (!isSignedIn()) return { text: `Not signed in. ${await signIn($, c, allowHuman)}` }
 
@@ -617,7 +625,7 @@ export const register: Register = (on, options) => {
 
     await refresh($, c)
     const snap = await read($, snapshot)
-    if (verb !== '') {
+    if (verb !== 'help' && verb !== 'rooms') {
       const prefix = e.args.trim().toLowerCase()
       const hit = snap.convs.find((x) => x.topic.toLowerCase().startsWith(prefix))
       if (!hit) return { text: `No room starts with "${e.args.trim()}".` }
@@ -627,14 +635,13 @@ export const register: Register = (on, options) => {
     }
     const here = await read($, current)
     const lines = snap.convs.map((x) => `${x.id === here ? '▸' : ' '} ${x.topic}${x.unread ? `  (${x.unread} unread)` : ''}${x.pending ? `  [${x.pending} for you]` : ''}${x.round ? '  ⟳ round' : ''}`)
-    void showPanel($)
     return {
       text: [
         'Your rooms:',
         ...(lines.length ? lines : ['  none yet: open an invitation link someone sent you']),
         '',
-        'The Sudare panel is open: read, write, invite and start rooms there.',
-        'Shortcuts, if you prefer typing:',
+        'Typed commands:',
+        '  /sudare                 open or close the panel',
         '  @name your message      send to someone in the open room',
         '  /sudare <topic>         switch room and show its messages',
         '  /sudare new <topic> @name   start a room',
