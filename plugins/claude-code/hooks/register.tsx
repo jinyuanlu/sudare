@@ -117,7 +117,7 @@ const loadTimeline = async (c: Client, conv: string, isSeen: boolean): Promise<S
   // Only a person looking at it counts as reading; a background refresh does not.
   if (last && isSeen) await c.api('POST', `/convs/${conv}/read`, { seq: num(last.seq) })
   const others = members.filter((m) => m.me !== true && m.left !== true).map((m): SudarePerson => ({ handle: str(m.handle), alias: str(m.alias), isHere: m.active === true }))
-  return { conv, topic: str(v.dm_with) || str(v.topic), me, others, lines, canInvite: v.can_invite === true }
+  return { conv, topic: str(v.dm_with) || str(v.topic), me, others, lines, canInvite: v.can_invite === true && v.archived !== true, isArchived: v.archived === true }
 }
 
 // The position in the person's inbox log this session has seen. Module state: a reload starts over, which only costs one refetch.
@@ -636,7 +636,7 @@ export const register: Register = (on, options) => {
           <Box flexDirection="column">
             <Text>
               <Text bold>{clip(shown.topic, 50)}</Text>
-              <Text dimColor>{shown.others.length === 1 ? `  ${shown.others[0]!.isHere ? '● here' : '○ away'}` : shown.others.length > 1 ? `  ${shown.others.filter((o) => o.isHere).length} of ${shown.others.length} here` : ''}{`  · you are ${shown.me}`}</Text>
+              <Text dimColor>{shown.others.length === 1 ? `  ${shown.others[0]!.isHere ? '● here' : '○ away'}` : shown.others.length > 1 ? `  ${shown.others.filter((o) => o.isHere).length} of ${shown.others.length} here` : ''}{`  · you are ${shown.me}`}{shown.isArchived ? '  · archived' : ''}</Text>
             </Text>
             {shown.others.length === 0 && <Text>Only you here. Press Invite.</Text>}
             {shown.others.length > 0 && shown.lines.length === 0 && <Text dimColor>No messages yet.</Text>}
@@ -649,7 +649,8 @@ export const register: Register = (on, options) => {
             ))}
           </Box>
         )}
-        {shown && shown.others.length > 1 && (
+        {shown && shown.isArchived && <Text dimColor>This room is archived. You can still read it; nobody can write in it.</Text>}
+        {shown && !shown.isArchived && shown.others.length > 1 && (
           <Box gap={2} flexWrap="wrap">
             <Text dimColor>To</Text>
             <Button key="to-all" {...(to === null ? { variant: 'primary' as const } : {})} label="Everyone" onPress={() => update($, target, () => null)} />
@@ -659,7 +660,7 @@ export const register: Register = (on, options) => {
             {picked && <Button key="private" label="Private chat" onPress={() => openPrivate($, c, shown.conv, picked)} />}
           </Box>
         )}
-        {shown && (
+        {shown && !shown.isArchived && (
           <Box borderStyle="round" borderColor="suggestion" paddingX={1} flexDirection="column">
             <Input key={`say-${shown.conv}`} label="Message" submitLabel="Send"
               placeholder={picked ? `Type here, for ${picked.handle} (all can read)` : shown.others.length > 1 ? 'Type here, to everyone' : shown.others.length === 1 ? `Type here, to ${shown.others[0]!.handle}` : 'Type here'}

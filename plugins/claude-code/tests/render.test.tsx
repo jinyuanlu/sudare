@@ -85,6 +85,17 @@ test('Leave asks first: one button, then Leave room or Stay', OPTIONS, async ($,
   await after.unmount()
 })
 
+test('an archived room is shown read-only: no message box, no To row, no Invite', OPTIONS, async ($, on) => {
+  const closed = { ...(STATE.timeline as object), canInvite: false, isArchived: true }
+  on('state.get', (_, e) => ({ value: { value: e.key === 'timeline' ? closed : e.key === 'compose' ? { isOpen: false, people: [] } : e.key === 'leaving' ? null : STATE[e.key], version: 1 } }))
+  const pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await pane.find({ type: 'Text', text: /This room is archived/ })).toBeDefined()
+  expect(await pane.find({ type: 'Text', text: /what TTL\?/ })).toBeDefined()
+  for (const key of ['say-c1', 'to-all', 'to-fox', 'invite']) expect(await pane.find({ key })).toBeUndefined()
+  expect(await pane.find({ key: 'leave' })).toBeDefined()
+  await pane.unmount()
+})
+
 test('a room with one other person has Invite and New room like any room, and no To row', OPTIONS, async ($, on) => {
   const two = { ...(STATE.timeline as object), topic: 'fox', canInvite: true, others: [{ handle: 'fox', alias: 'a1', isHere: false }] }
   on('state.get', (_, e) => ({ value: { value: e.key === 'timeline' ? two : e.key === 'compose' ? { isOpen: false, people: [] } : e.key === 'target' ? null : STATE[e.key], version: 1 } }))
