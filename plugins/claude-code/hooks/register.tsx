@@ -780,7 +780,7 @@ export const register: Register = (on, options) => {
     await read($, pictureTick)
     const c = makeClient($, server, keep)
     const [snap, here, isIn, shown, note] = [await read($, snapshot), await read($, current), await read($, signedIn), await read($, timeline), await read($, notice)]
-    const room = Math.max(8, (e.viewport?.rows ?? 30) - snap.convs.length - 12)
+    const room = Math.max(8, (e.viewport?.rows ?? 30) - 13)
     const to = await read($, target)
     const [form, isHelp, asked] = [await read($, compose), await read($, helpOpen), await read($, leaving)]
     const isLeaving = shown !== null && asked === shown.conv
@@ -842,7 +842,7 @@ export const register: Register = (on, options) => {
                     {words}
                     {l.images.map((i, n) => (
                       <Button key={`big-${i.id}`} onPress={() => c.open(`${c.base}/c/${shown.conv}/p/${i.id}`)}>
-                        <Text dimColor>{l.images!.length > 1 ? `enlarge ${n + 1}` : 'enlarge'}</Text>
+                        <Text dimColor>{l.images!.length > 1 ? `view ${n + 1}` : 'view'}</Text>
                       </Button>
                     ))}
                   </Box>
@@ -882,7 +882,7 @@ export const register: Register = (on, options) => {
           </Box>
         )}
         {others.length > 0 && (
-          <Box flexDirection="column">
+          <Box gap={2} flexWrap="wrap">
             <Text dimColor>Other rooms</Text>
             {others.map((x) => (
               <Button key={`conv-${x.id}`} label={`${clip(x.topic, 40)}${x.unread ? ` · ${x.unread} new` : ''}`} onPress={() => openConv($, c, x.id)} />
