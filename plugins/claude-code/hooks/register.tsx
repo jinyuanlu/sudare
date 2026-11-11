@@ -239,6 +239,20 @@ async function post($: Engine, c: Client, path: string, body: Json, done: string
   return r.ok
 }
 
+// The panel is on screen showing a room with messages still counted as unread: the person
+// is looking at them, so they are read. One at a time; the count reaching zero ends it.
+let isMarking = false
+async function markSeen($: Engine, c: Client): Promise<void> {
+  if (isMarking) return
+  isMarking = true
+  try {
+    await refresh($, c, true)
+    await refresh($, c)
+  } finally {
+    isMarking = false
+  }
+}
+
 async function leaveConv($: Engine, c: Client, conv: string, topic: string): Promise<void> {
   await update($, leaving, () => null)
   if (!(await post($, c, `/convs/${conv}/leave`, {}, `Left "${clip(topic, 40)}".`))) return
@@ -602,6 +616,7 @@ export const register: Register = (on, options) => {
     const [form, isHelp, asked] = [await read($, compose), await read($, helpOpen), await read($, leaving)]
     const isLeaving = shown !== null && asked === shown.conv
     const picked = shown?.others.find((o) => o.handle === to) ?? null
+    if (isIn && shown && (snap.convs.find((x) => x.id === shown.conv)?.unread ?? 0) > 0) void markSeen($, c).catch(() => undefined)
     if (!isIn) {
       return (
         <Box flexDirection="column">
