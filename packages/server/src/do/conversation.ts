@@ -218,7 +218,7 @@ export class ConversationDO extends DurableObject<Env> {
 
   /** Projects membership and topic into the D1 directory. Idempotent upserts. */
   private async project(acked: number): Promise<void> {
-    const events = this.rows(`seq > ? AND kind IN ('conv_created','conv_renamed','conv_archived','member_joined','member_left') ORDER BY seq LIMIT ${BATCH}`, acked)
+    const events = this.rows(`seq > ? AND kind IN ('conv_created','conv_renamed','conv_archived','member_joined','member_renamed','member_left') ORDER BY seq LIMIT ${BATCH}`, acked)
     const db = this.env.DB
     const statements = events.flatMap((e): D1PreparedStatement[] => {
       const b = e.body
@@ -237,6 +237,12 @@ export class ConversationDO extends DurableObject<Env> {
             // room, and the two can open a fresh chat between themselves.
             db.prepare(`UPDATE convs SET dm_key = NULL WHERE id = ? AND dm_key IS NOT NULL AND (SELECT count(*) FROM aliases WHERE conv = ? AND left_at IS NULL) > 2`)
               .bind(e.conv, e.conv),
+          ]
+        case 'member_renamed':
+          return [
+            db.prepare(`UPDATE aliases SET handle = ? WHERE alias = ?`).bind(b.handle, b.alias),
+            // Invitations still waiting for an answer say who sent them: keep that current.
+            db.prepare(`UPDATE invites SET by_handle = ? WHERE conv = ? AND used_at IS NULL AND by_principal = (SELECT principal FROM aliases WHERE alias = ?)`).bind(b.handle, e.conv, b.alias),
           ]
         case 'member_left':
           return [db.prepare(`UPDATE aliases SET left_at = ? WHERE alias = ?`).bind(e.ts, b.alias)]

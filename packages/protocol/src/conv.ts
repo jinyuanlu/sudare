@@ -162,6 +162,10 @@ export const apply = (state: ConvState, e: StoredConvEvent): ConvState => {
           },
         },
       }
+    case 'member_renamed': {
+      const m = s.members[b.alias]
+      return m ? { ...s, members: { ...s.members, [b.alias]: { ...m, handle: b.handle } } } : s
+    }
     case 'member_left': {
       const m = s.members[b.alias]
       const next = m ? { ...s, members: { ...s.members, [b.alias]: { ...m, leftSeq: e.seq } } } : s
@@ -239,6 +243,7 @@ export type Command =
   | { t: 'leave'; id: EventId; principal: PrincipalId }
   | { t: 'archive'; id: EventId; principal: PrincipalId }
   | { t: 'rename'; id: EventId; principal: PrincipalId; topic: string }
+  | { t: 'set_handle'; id: EventId; principal: PrincipalId; handle: string }
   | { t: 'set_retention'; id: EventId; principal: PrincipalId; days: number }
   | {
       t: 'post'; id: EventId; principal: PrincipalId; path: WritePath
@@ -462,6 +467,16 @@ export const decide = (s: ConvState, c: Command, env: DecideEnv): Decision => {
       if (isErr(m)) return reject(m)
       const topic = normalizeTopic(c.topic)
       return topic.ok ? accept([emit(c.id, { kind: 'conv_renamed', topic: topic.value, by: m.alias })]) : reject(topic)
+    }
+    case 'set_handle': {
+      // A name is a label on an alias. Nothing in the log refers to it, so changing it rewrites no history.
+      const m = writer(s, c.principal)
+      if (isErr(m)) return reject(m)
+      const handle = normalizeHandle(c.handle)
+      if (!handle.ok) return reject(handle)
+      if (handle.value === m.handle) return accept([])
+      const taken = allMembers(s).some((x) => x.principal !== c.principal && handleKey(x.handle) === handleKey(handle.value))
+      return taken ? reject(err('handle_taken')) : accept([emit(c.id, { kind: 'member_renamed', alias: m.alias, handle: handle.value, was: m.handle })])
     }
     case 'set_retention': {
       const m = writer(s, c.principal)

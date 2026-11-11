@@ -55,6 +55,8 @@ const op: fc.Arbitrary<Op> = fc.oneof(
       return { t: 'join', id, member: { principal: PEOPLE[k]!, alias: `${ALIASES[k]}${i}` as AliasId, handle: `h${k}` } }
     }) },
   { weight: 1, arbitrary: fc.tuple(nat, wild).map(([who, w]): Op => (id, sim) => ({ t: 'leave', id, principal: somebody(sim, who, w) })) },
+  // A small pool of names, some of them already someone else's, in either letter case.
+  { weight: 2, arbitrary: fc.tuple(nat, fc.nat(9), wild).map(([who, name, w]): Op => (id, sim) => ({ t: 'set_handle', id, principal: somebody(sim, who, w), handle: name % 2 ? `H${name % 7}` : `h${name % 7}` })) },
   { weight: 3, arbitrary: fc.tuple(nat, nat, fc.integer({ min: 1, max: 4 }), fc.integer({ min: 1, max: 40 }), fc.integer({ min: 1, max: 120 }), wild).map(([who, i, messages, chars, ttl, w]): Op => (id, sim) =>
       ({ t: 'round_open', id, principal: somebody(sim, who, w), round: freshRound(sim, i), goal: 'g', budget: { messages, chars, until: sim.now + ttl } })) },
   { weight: 3, arbitrary: fc.tuple(nat, nat, wild).map(([who, i, w]): Op => (id, sim) => ({ t: 'round_join', id, principal: somebody(sim, who, w), round: liveRound(sim, i, w) })) },
@@ -109,7 +111,7 @@ const authorAlias = (e: StoredConvEvent): AliasId | null => {
     case 'message': case 'note_revision': return b.author.alias
     case 'receipt': case 'note_endorsed': case 'conv_renamed': case 'retention_set': case 'conv_archived': return b.by
     case 'round_opened': return b.by
-    case 'round_joined': case 'round_seated': case 'member_left': return b.alias
+    case 'round_joined': case 'round_seated': case 'member_left': case 'member_renamed': return b.alias
     default: return null
   }
 }
@@ -226,7 +228,20 @@ describe('conversation log invariants', () => {
       const active = activeMembers(state)
       expect(new Set(active.map((m) => m.handle.toLowerCase())).size).toBe(active.length)
       expect(new Set(active.map((m) => m.principal)).size).toBe(active.length)
+      // Nobody ever holds a name that is, or was last, someone else's.
+      const all = Object.values(state.members)
+      for (const a of all) for (const b of all) if (a.principal !== b.principal) expect(a.handle.toLowerCase()).not.toBe(b.handle.toLowerCase())
     }))
+
+  it('a rename changes one member\'s label and nothing else', () =>
+    prop(({ log }) =>
+      replay(log, (before, e) => {
+        if (e.body.kind !== 'member_renamed') return
+        const after = apply(before, e)
+        expect(before.members[e.body.alias]!.handle).toBe(e.body.was)
+        expect(after.members[e.body.alias]).toEqual({ ...before.members[e.body.alias]!, handle: e.body.handle })
+        expect({ ...after, members: before.members, seq: before.seq }).toEqual(before)
+      })))
 })
 
 describe('generator coverage', () => {
@@ -240,6 +255,7 @@ describe('generator coverage', () => {
     expect(count((s) => kinds(s).some((b) => b.kind === 'note_revision' && b.author.kind === 'autonomous'))).toBeGreaterThan(3)
     expect(count((s) => Object.values(s.state.notes).some((n) => n.revs.some((r) => r.adoptedSeq !== null)))).toBeGreaterThan(10)
     expect(count((s) => kinds(s).some((b) => b.kind === 'member_joined' && b.via === 'invite'))).toBeGreaterThan(10)
+    expect(count((s) => kinds(s).some((b) => b.kind === 'member_renamed'))).toBeGreaterThan(10)
   })
 })
 

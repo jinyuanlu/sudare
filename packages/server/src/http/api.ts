@@ -7,6 +7,7 @@ import {
   newDeviceId, newEventId, newNoteId, newRoundId, err, ok,
   type AliasId, type AliasRef, type ConvId, type DeviceId, type DraftId, type ErrorCode, type EventId, type InviteId,
   type Me, type NoteId, type PrincipalId, type ReceiptState, type Result, type RoundId,
+  normalizeHandle,
 } from '@sudare/protocol'
 import { z } from 'zod'
 import { TOKEN_PREFIX, revokeGrants } from '../auth/oauth'
@@ -294,7 +295,15 @@ api.get('/convs/:id', anyHuman, async (c) => {
 
 api.patch('/convs/:id', anyHuman, async (c) => {
   const id = param(c, 'id', isConvId)
-  const input = await body(c, z.object({ topic: z.string().min(1).max(LIMITS.topic * 4).optional(), retention_days: z.number().int().optional() }))
+  const input = await body(c, z.object({ topic: z.string().min(1).max(LIMITS.topic * 4).optional(), retention_days: z.number().int().optional(), handle: z.string().min(1).max(100).optional() }))
+  // The caller's own name in this room. Nobody can set anyone else's.
+  if (input.handle !== undefined) {
+    const r = await conv(c, id).exec(id, { t: 'set_handle', id: newEventId(), principal: me(c), handle: input.handle })
+    if (!r.ok) return send(c, err(r.error, r.detail))
+    // The name offered the next time this person joins a room is the one they chose last.
+    const chosen = normalizeHandle(input.handle)
+    if (chosen.ok) await c.env.DB.prepare(`UPDATE principals SET default_handle = ? WHERE id = ?`).bind(chosen.value, me(c)).run()
+  }
   if (input.topic !== undefined) {
     const r = await conv(c, id).exec(id, { t: 'rename', id: newEventId(), principal: me(c), topic: input.topic })
     if (!r.ok) return send(c, err(r.error, r.detail))

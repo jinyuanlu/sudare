@@ -270,3 +270,35 @@ describe('a public demo server', () => {
     expect((await cat.convs()).length).toBe(1)
   })
 })
+
+describe('changing your name in a room', () => {
+  it('relabels the member everywhere, rewrites no message, and cannot take a name in use', async () => {
+    const { who: ann, conv } = await founder()
+    const bob = await invite(ann, conv, 'bob')
+    const said = await ann.send(conv, 'hello', { to_handles: ['bob'] })
+    const link = (await ann.post(`/convs/${conv}/invites`, { link: true })).body
+
+    expect((await ann.patch(`/convs/${conv}`, { handle: 'Bob' })).body.error).toBe('handle_taken')
+    expect((await ann.patch(`/convs/${conv}`, { handle: 'two words' })).body.error).toBe('handle_invalid')
+    const view = await ann.patch(`/convs/${conv}`, { handle: 'Prospero' })
+    expect(view.status).toBe(200)
+    expect(view.body.members.map((m: any) => m.handle).sort()).toEqual(['Prospero', 'bob'])
+
+    // The message is the same event, by the same alias; only the label resolved from it changed.
+    const events = (await bob.get(`/convs/${conv}/events?limit=200`)).body.events
+    const message = events.find((e: any) => e.id === said)
+    const renamed = events.find((e: any) => e.body.kind === 'member_renamed')
+    expect(renamed.body).toMatchObject({ handle: 'Prospero', was: 'ann', alias: message.body.author.alias })
+    // bob sees it in his list of what is waiting, the room list, and the pending invitation.
+    await eventually(async () => (await bob.get('/inbox')).body.some?.((i: any) => i.from === 'Prospero') || JSON.stringify((await bob.get('/inbox')).body).includes('Prospero'), 'inbox sender')
+    await eventually(async () => (await ann.convs())[0]?.handle === 'Prospero', 'room list')
+    await eventually(async () => (await raw(`/api/join/${link.url.split('/j/')[1]}/check`).then((r) => r.json<any>())).by === 'Prospero', 'invitation card')
+    expect((await ann.get('/me')).body.default_handle).toBe('Prospero')
+    // Addressing by the new name works, and the old name no longer reaches anyone.
+    await bob.send(conv, 'hi', { to_handles: ['Prospero'] })
+    await expect(bob.send(conv, 'hi', { to_handles: ['ann'] })).rejects.toThrow(/recipient_unknown/)
+    // bob cannot rename ann: the route only ever renames the caller.
+    await bob.patch(`/convs/${conv}`, { handle: 'Caliban' })
+    expect((await ann.get(`/convs/${conv}`)).body.members.map((m: any) => m.handle).sort()).toEqual(['Caliban', 'Prospero'])
+  })
+})

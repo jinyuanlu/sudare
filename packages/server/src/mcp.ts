@@ -54,7 +54,7 @@ const shape = (events: ConvEvent[], members: ConvView['members']) => {
         return { ...base, round: b.round, who: name(b.alias) }
       case 'round_closed':
         return { ...base, round: b.round, reason: b.reason }
-      case 'member_joined': case 'member_left':
+      case 'member_joined': case 'member_left': case 'member_renamed':
         return { ...base, who: name(b.alias) }
       case 'conv_created': case 'conv_renamed':
         return { ...base, untrusted_topic: b.topic }

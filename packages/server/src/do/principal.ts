@@ -200,6 +200,10 @@ export class PrincipalDO extends DurableObject<Env> {
         this.sql.exec(`UPDATE convs SET gone = 0 WHERE conv = ?`, d.conv)
         this.append({ kind: 'conv_joined', conv: d.conv, alias: b.alias, from_seq: e.seq }, at)
         return false
+      case 'member_renamed':
+        // What is waiting for this person shows who it is from: under the name they go by now.
+        this.sql.exec(`UPDATE items SET sender = ? WHERE conv = ? AND sender = ?`, b.handle, d.conv, b.was)
+        return notice(), false
       case 'member_left':
         if (!mine) return notice(), false
         this.sql.exec(`UPDATE convs SET gone = 1 WHERE conv = ?`, d.conv)

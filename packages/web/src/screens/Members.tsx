@@ -1,6 +1,7 @@
 import { useState } from 'preact/hooks'
 import type { ContactView, ConvView, MemberView } from '@sudare/protocol'
-import { api, type InviteLink } from '../api'
+import { normalizeHandle } from '@sudare/protocol'
+import { ApiFailure, api, type InviteLink } from '../api'
 import { useAction, useLoad } from '../hooks'
 import { t } from '../i18n'
 import { navigate } from '../router'
@@ -76,7 +77,34 @@ const InviteSection = ({ view }: { view: ConvView }) => {
   )
 }
 
-export const MembersDialog = ({ view, onClose }: { view: ConvView; onClose: () => void }) => {
+const RenameMe = ({ view, current, onChanged }: { view: ConvView; current: string; onChanged: (v: ConvView) => void }) => {
+  const [open, setOpen] = useState(false)
+  const [handle, setHandle] = useState(current)
+  const act = useAction()
+  const save = (e: Event) => {
+    e.preventDefault()
+    void act.run(async () => {
+      const h = normalizeHandle(handle)
+      if (!h.ok) throw new ApiFailure('handle_invalid', 400)
+      onChanged(await api.patchConv(view.id, { handle: h.value }))
+      setOpen(false)
+    })
+  }
+  if (!open) return <button type="button" data-testid="rename-me" onClick={() => setOpen(true)}>{t('members.rename')}</button>
+  return (
+    <form class="rename-me" onSubmit={save}>
+      <div class="row">
+        <input data-testid="rename-input" aria-label={t('join.handle')} value={handle} maxLength={24} required autocomplete="nickname" onInput={(e) => setHandle(e.currentTarget.value)} />
+        <button type="submit" class="primary" data-testid="rename-save" disabled={act.busy}>{t('members.renameSave')}</button>
+        <button type="button" disabled={act.busy} onClick={() => setOpen(false)}>{t('common.cancel')}</button>
+      </div>
+      <p class="muted small">{t('members.renameHint')}</p>
+      <ErrorNote error={act.error} />
+    </form>
+  )
+}
+
+export const MembersDialog = ({ view, onClose, onChanged }: { view: ConvView; onClose: () => void; onChanged: (v: ConvView) => void }) => {
   const act = useAction()
   const me = view.members.find((m) => m.me)
   const chat = (m: MemberView) => void act.run(async () => {
@@ -100,6 +128,7 @@ export const MembersDialog = ({ view, onClose }: { view: ConvView; onClose: () =
               {m.left ? <span class="tag">{t('members.left')}</span> : null}
             </span>
             {!m.me && !m.left && !me?.left ? <button type="button" disabled={act.busy} onClick={() => chat(m)}>{t('members.chat')}</button> : null}
+            {m.me && !m.left && !view.archived ? <RenameMe view={view} current={m.handle} onChanged={onChanged} /> : null}
           </li>
         ))}
       </ul>

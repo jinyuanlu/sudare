@@ -215,3 +215,4 @@ select { max-width: 100%; }
 .quick h3 { margin: 0 0 .25rem; font-size: 1rem; }
 .site-notice { text-align: center; padding: 0.75rem; margin: 0; }
 .quick code .nb { white-space: nowrap; }
+.rows > li { flex-wrap: wrap; } .rename-me { flex-basis: 100%; } .rename-me input { flex: 1; min-width: 8rem; }

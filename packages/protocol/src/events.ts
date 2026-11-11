@@ -24,6 +24,7 @@ export type ConvBody =
   | { kind: 'conv_renamed'; topic: string; by: AliasId }
   | { kind: 'retention_set'; days: number; by: AliasId }
   | { kind: 'member_joined'; alias: AliasId; handle: string; via: JoinVia }
+  | { kind: 'member_renamed'; alias: AliasId; handle: string; was: string }
   | { kind: 'member_left'; alias: AliasId }
   | { kind: 'conv_archived'; by: AliasId }
   | { kind: 'message'; author: Author; text: string; to: AliasId[]; cause: EventId | null }

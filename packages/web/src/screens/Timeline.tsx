@@ -107,6 +107,7 @@ const systemText = (e: ConvEvent, name: Names): string | null => {
     case 'conv_renamed': return t('sys.renamed', { who: name(b.by), topic: b.topic })
     case 'retention_set': return t('sys.retention', { who: name(b.by), days: b.days })
     case 'member_joined': return t('sys.joined', { who: b.handle })
+    case 'member_renamed': return t('sys.renamedMember', { was: b.was, who: b.handle })
     case 'member_left': return t('sys.left', { who: name(b.alias) })
     case 'conv_archived': return t('sys.archived', { who: name(b.by) })
     case 'round_opened': return t('sys.roundOpened', { who: name(b.by), goal: b.goal })

@@ -118,7 +118,7 @@ export const ConvScreen = ({ id, at }: { id: ConvId; at: number | null }) => {
   }
 
   const joinedLater = new Map<AliasId, string>()
-  for (const e of tl.events) if (e.body.kind === 'member_joined') joinedLater.set(e.body.alias, e.body.handle)
+  for (const e of tl.events) if (e.body.kind === 'member_joined' || e.body.kind === 'member_renamed') joinedLater.set(e.body.alias, e.body.handle)
   const name = namesOf(view, joinedLater)
   const me = view.members.find((m) => m.me)
   const active = view.members.filter((m) => !m.left)
@@ -155,7 +155,7 @@ export const ConvScreen = ({ id, at }: { id: ConvId; at: number | null }) => {
           />
         ) : <p class="muted pad center">{t(view.archived ? 'conv.archivedNote' : 'conv.leftNote')}</p>}
       </div>
-      {panel === 'members' ? <MembersDialog view={view} onClose={() => setPanel(null)} /> : null}
+      {panel === 'members' ? <MembersDialog view={view} onClose={() => setPanel(null)} onChanged={(v) => { conv.set(v); void refresh('convs') }} /> : null}
       {panel === 'round' ? <OpenRoundDialog conv={id} onClose={() => setPanel(null)} onOpened={() => { setPanel(null); conv.reload() }} /> : null}
       {panel === 'rename' ? <RenameDialog view={view} onClose={() => setPanel(null)} onSaved={saved} /> : null}
       {panel === 'retention' ? <RetentionDialog view={view} onClose={() => setPanel(null)} onSaved={saved} /> : null}
