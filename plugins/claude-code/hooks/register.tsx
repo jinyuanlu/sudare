@@ -60,7 +60,8 @@ const pictureBox = (w: number, h: number, widest: number): { columns: number; ro
 }
 /** The lines a message takes in the panel: its text, and the box of each picture it carries. */
 const heightOf = (l: SudareLine, wide: number): number =>
-  1 + (l.images ?? []).reduce((n, i) => n + pictureBox(i.w, i.h, wide).rows, 0)
+  Math.max(1, Math.ceil((columnsOf(`${l.isMine ? 'you' : l.from}  ${l.text}`) + (l.isMine ? 0 : 16)) / Math.max(10, wide))) +
+  (l.images ?? []).reduce((n, i) => n + pictureBox(i.w, i.h, wide).rows, 0)
 /** The latest messages that fit in `room` lines, pictures counted at their drawn height. Always at least one. */
 const fitting = (lines: SudareLine[], room: number, wide: number): SudareLine[] => {
   let [used, from] = [0, lines.length]
@@ -337,6 +338,12 @@ async function sendPictures($: Engine, c: Client, handle: string | null, text: s
   return r.ok ? `Sent ${images.length === 1 ? 'the picture' : `${images.length} pictures`}${handle ? ` to @${handle}` : ''}.` : `Not sent: ${why(r)}`
 }
 
+/** Open the panel where a person expects a chat to open: at the latest message and the box to write in. */
+async function showPanel($: Engine, isFocused = false): Promise<void> {
+  await $.ui.open({ id: PANE, title: 'Sudare', ...(isFocused ? { focus: true as const } : {}) })
+  await $.ui.scroll({ in: PANE, to: 'end' }).catch(() => undefined)
+}
+
 async function leaveConv($: Engine, c: Client, conv: string, topic: string): Promise<void> {
   await update($, leaving, () => null)
   if (!(await post($, c, `/convs/${conv}/leave`, {}, `Left "${clip(topic, 40)}".`))) return
@@ -492,7 +499,7 @@ async function inviteLink($: Engine, c: Client, conv: string, surface: 'terminal
 async function replyTo($: Engine, c: Client, item: SudareItem): Promise<void> {
   await openConv($, c, item.conv)
   await update($, target, () => item.from)
-  await $.ui.open({ id: PANE, title: 'Sudare', focus: true })
+  await showPanel($, true)
 }
 
 async function handOff($: Engine, c: Client, item: SudareItem, mode: 'readonly' | 'full'): Promise<void> {
@@ -583,7 +590,7 @@ export const register: Register = (on, options) => {
     if (verb === 'web') return { text: (await c.open(c.base)) ? 'Opened Sudare in your browser.' : `Open ${c.base}` }
     if (verb === 'join') return { text: (await c.open(rest[0] ?? c.base)) ? 'Opened the invitation in your browser; confirm there.' : `Open ${rest[0] ?? c.base}` }
     if (verb === 'panel') {
-      await $.ui.open({ id: PANE, title: 'Sudare' })
+      await showPanel($)
       return { text: 'Sudare panel opened.' }
     }
     if (!isSignedIn()) return { text: `Not signed in. ${await signIn($, c, allowHuman)}` }
@@ -620,7 +627,7 @@ export const register: Register = (on, options) => {
     }
     const here = await read($, current)
     const lines = snap.convs.map((x) => `${x.id === here ? '▸' : ' '} ${x.topic}${x.unread ? `  (${x.unread} unread)` : ''}${x.pending ? `  [${x.pending} for you]` : ''}${x.round ? '  ⟳ round' : ''}`)
-    void $.ui.open({ id: PANE, title: 'Sudare' })
+    void showPanel($)
     return {
       text: [
         'Your rooms:',
@@ -714,7 +721,7 @@ export const register: Register = (on, options) => {
       return (
         <Box gap={2}>
           <Text dimColor>Sudare{unread > 0 ? ` · ${unread} unread` : shown && shown.others.length === 0 ? ' · nobody else here yet' : ''}</Text>
-          <Button key="open" label="Open" onPress={() => $.ui.open({ id: PANE, title: 'Sudare' })} />
+          <Button key="open" label="Open" onPress={() => showPanel($)} />
         </Box>
       )
     }
@@ -722,7 +729,7 @@ export const register: Register = (on, options) => {
     const many = snap.convs.length > 1
     const shownNote = note && !note.startsWith('Invitation link') ? note : null
     const first = shownNote ? 'note' : item ? 'item' : draft ? 'draft' : invite ? 'invite' : 'seat'
-    const open = <Button key="open" label="Open" onPress={() => $.ui.open({ id: PANE, title: 'Sudare' })} />
+    const open = <Button key="open" label="Open" onPress={() => showPanel($)} />
     const where = (t: string) => (many ? ` in ${clip(t, 24)}` : '')
     return (
       <Box flexDirection="column">
@@ -746,7 +753,7 @@ export const register: Register = (on, options) => {
           <Box gap={2}>
             <Text><Text dimColor>Claude wrote{draft.topic ? where(draft.topic) : ''}:</Text>  {clip(draft.text, 80)}</Text>
             <Button key="approve" variant="primary" label={draft.status === 'approving' ? 'Retry' : 'Send'} onPress={() => post($, c, `/drafts/${draft.id}/approve`, {}, 'Sent.')} />
-            <Button key="edit" label="Edit" onPress={() => $.ui.open({ id: PANE, title: 'Sudare' })} />
+            <Button key="edit" label="Edit" onPress={() => showPanel($)} />
             <Button key="reject" label="Discard" onPress={() => post($, c, `/drafts/${draft.id}/reject`, {}, 'Discarded.')} />
             {first === 'draft' && open}
           </Box>
@@ -780,12 +787,16 @@ export const register: Register = (on, options) => {
     await read($, pictureTick)
     const c = makeClient($, server, keep)
     const [snap, here, isIn, shown, note] = [await read($, snapshot), await read($, current), await read($, signedIn), await read($, timeline), await read($, notice)]
-    const room = Math.max(8, (e.viewport?.rows ?? 30) - 13)
     const to = await read($, target)
     const [form, isHelp, asked] = [await read($, compose), await read($, helpOpen), await read($, leaving)]
     const isLeaving = shown !== null && asked === shown.conv
     const busy = await read($, working)
     const whole = String((await read($, overflow)) ?? '')
+    // The panel holds `bodyRows` rows before it has to scroll. Show as many of the latest messages as
+    // leave the box to write in and the buttons on screen, so opening it never lands above them.
+    const fixed = 2 + (note ? 4 : 0) + (isHelp ? HELP.length + 3 : 0) + ((shown?.others.length ?? 0) > 1 ? 2 : 0) + 4 +
+      (snap.convs.length > 1 ? 2 : 0) + snap.drafts.length * 4 + (busy ? 1 : 0) + (isLeaving ? 2 : 0) + 3
+    const room = Math.max(4, (e.props.scroll?.bodyRows ?? e.viewport?.rows ?? 30) - fixed)
     const picked = shown?.others.find((o) => o.handle === to) ?? null
     const askable = shown && !shown.isArchived ? shown.lines.filter((l) => !l.isMine && l.via !== 'note').slice(-3).map((l) => l.id) : []
     if (isIn && shown && (snap.convs.find((x) => x.id === shown.conv)?.unread ?? 0) > 0) void markSeen($, c).catch(() => undefined)
