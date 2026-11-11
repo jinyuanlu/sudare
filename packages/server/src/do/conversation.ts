@@ -12,9 +12,9 @@
 import { DurableObject } from 'cloudflare:workers'
 import {
   activeMembers, adoptedRev, allMembers, apply, canInvite, canReadSeq, decide, emptyConv, isCreator, latestRev,
-  memberOf, newEventId, openRounds, publicEvent, remaining, err, ok,
+  LIMITS, memberOf, newEventId, openRounds, publicEvent, remaining, err, ok,
   type AliasId, type Command, type ConvBody, type ConvEvent, type ConvId, type ConvState, type ConvView,
-  type DeviceId, type Err, type EventId, type Member, type NoteId, type NoteView, type PrincipalId, type Result,
+  type DeviceId, type Err, type EventId, type ImageRef, type ImageType, type Member, type NoteId, type NoteView, type PrincipalId, type Result,
   type Round, type RoundId, type RoundView, type StoredConvEvent,
 } from '@sudare/protocol'
 import type { Env } from '../env'
@@ -22,6 +22,7 @@ import { DIRECTORY, type DeliveredEvent, type Delivery } from './types'
 
 const DAY = 86_400_000
 const BATCH = 200
+const PART = 1024 * 1024
 const LONG_POLL_MS = 25_000
 const RETRY_MIN_MS = 2_000
 const RETRY_MAX_MS = 5 * 60_000
@@ -57,6 +58,12 @@ export class ConversationDO extends DurableObject<Env> {
     sql.exec(`CREATE INDEX IF NOT EXISTS events_ref ON events(ref)`)
     sql.exec(`CREATE TABLE IF NOT EXISTS cursors (target TEXT PRIMARY KEY, acked INTEGER NOT NULL)`)
     sql.exec(`CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)`)
+    // Pictures. `seq` is the message a picture belongs to; null until it is sent with one.
+    sql.exec(`CREATE TABLE IF NOT EXISTS blobs (
+      id TEXT PRIMARY KEY, by TEXT NOT NULL, type TEXT NOT NULL, bytes INTEGER NOT NULL, w INTEGER NOT NULL, h INTEGER NOT NULL,
+      ts INTEGER NOT NULL, seq INTEGER, thumb INTEGER NOT NULL DEFAULT 0)`)
+    // A row holds at most 2 MB, so bytes are kept in parts.
+    sql.exec(`CREATE TABLE IF NOT EXISTS blob_parts (id TEXT NOT NULL, kind TEXT NOT NULL, i INTEGER NOT NULL, data BLOB NOT NULL, PRIMARY KEY (id, kind, i))`)
     const saved = this.meta('state')
     this.state = saved ? (JSON.parse(saved) as ConvState) : emptyConv('' as ConvId)
   }
@@ -113,6 +120,7 @@ export class ConversationDO extends DurableObject<Env> {
           e.seq, e.id, e.ts, e.body.kind, refOf(e.body), JSON.stringify(e.body), JSON.stringify(e.private), direct,
         )
         state = apply(state, e)
+        if (e.body.kind === 'message') for (const image of e.body.images ?? []) this.sql.exec(`UPDATE blobs SET seq = ? WHERE id = ?`, e.seq, image.id)
         if (e.body.kind === 'member_joined') {
           const m = state.members[e.body.alias]!
           this.sql.exec(
@@ -290,11 +298,13 @@ export class ConversationDO extends DurableObject<Env> {
         return true
       }
     }
+    this.dropImages(`seq IS NULL AND ts <= ?`, Date.now() - DAY) // uploaded and never sent
     const top = this.sql.exec<{ m: number | null }>(
       `SELECT max(seq) AS m FROM events WHERE kind IN ('message','receipt') AND ts <= ?`, horizon,
     ).toArray()[0]?.m
     if (!top || top <= this.floor()) return false
     this.sql.exec(`DELETE FROM events WHERE kind IN ('message','receipt') AND seq <= ?`, top)
+    this.dropImages(`seq <= ?`, top)
     this.setMeta('floor', String(top))
     await Promise.allSettled(
       activeMembers(s).map((m) => this.env.PRINCIPAL.get(this.env.PRINCIPAL.idFromName(m.principal)).purged(s.conv, top)),
@@ -372,6 +382,63 @@ export class ConversationDO extends DurableObject<Env> {
     return ok({ events: (forward ? page : page.reverse()).map(publicEvent), more: rows.length > limit })
   }
 
+  // -- pictures -------------------------------------------------------------------
+
+  private parts(id: string, kind: 'full' | 'thumb'): Uint8Array {
+    const rows = this.sql.exec<{ data: ArrayBuffer }>(`SELECT data FROM blob_parts WHERE id = ? AND kind = ? ORDER BY i`, id, kind).toArray().map((r) => new Uint8Array(r.data))
+    const out = new Uint8Array(rows.reduce((n, r) => n + r.length, 0))
+    rows.reduce((at, r) => (out.set(r, at), at + r.length), 0)
+    return out
+  }
+
+  private keep(id: string, kind: 'full' | 'thumb', data: Uint8Array): void {
+    for (let i = 0; i * PART < data.length; i++) this.sql.exec(`INSERT INTO blob_parts (id, kind, i, data) VALUES (?, ?, ?, ?)`, id, kind, i, data.slice(i * PART, (i + 1) * PART).buffer)
+  }
+
+  /** A member puts a picture in the room, to send with their next message. A few may wait unsent, no more. */
+  async putImage(p: PrincipalId, image: { type: ImageType; w: number; h: number; data: Uint8Array; thumb: Uint8Array | null }): Promise<Result<ImageRef>> {
+    const m = this.member(p)
+    if (!m.ok) return m
+    if (this.state.archivedSeq !== null) return err('conv_archived')
+    const waiting = this.sql.exec<{ n: number }>(`SELECT count(*) AS n FROM blobs WHERE by = ? AND seq IS NULL AND ts > ?`, p, Date.now() - DAY).one().n
+    if (waiting >= 2 * LIMITS.image.perMessage) return err('rate_limited')
+    const ref: ImageRef = { id: `b_${crypto.randomUUID().replace(/-/g, '')}`, type: image.type, bytes: image.data.length, w: image.w, h: image.h }
+    this.ctx.storage.transactionSync(() => {
+      this.sql.exec(`INSERT INTO blobs (id, by, type, bytes, w, h, ts, seq, thumb) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?)`, ref.id, p, ref.type, ref.bytes, ref.w, ref.h, Date.now(), image.thumb ? 1 : 0)
+      this.keep(ref.id, 'full', image.data)
+      if (image.thumb) this.keep(ref.id, 'thumb', image.thumb)
+    })
+    return ok(ref)
+  }
+
+  /** The pictures a person is about to send: theirs, in this room, not yet sent. What the log will say about them comes from here, not from the client. */
+  async unsentImages(p: PrincipalId, ids: string[]): Promise<Result<ImageRef[]>> {
+    const rows = ids.map((id) => this.sql.exec<ImageRef & { by: string; seq: number | null }>(`SELECT id, by, type, bytes, w, h, seq FROM blobs WHERE id = ?`, id).toArray()[0])
+    return rows.every((r) => r && r.by === p && r.seq === null)
+      ? ok(rows.map((r) => ({ id: r!.id, type: r!.type, bytes: r!.bytes, w: r!.w, h: r!.h })))
+      : err('bad_request', 'images')
+  }
+
+  /**
+   * A picture, for a member who may read the message it belongs to (I12), or for the
+   * person who uploaded it. `small` is the PNG preview a terminal can draw, where there is one.
+   */
+  async image(p: PrincipalId, id: string, small: boolean): Promise<Result<{ type: ImageType; data: Uint8Array }>> {
+    const m = this.member(p)
+    if (!m.ok) return m
+    const row = this.sql.exec<{ by: string; type: ImageType; seq: number | null; thumb: number }>(`SELECT by, type, seq, thumb FROM blobs WHERE id = ?`, id).toArray()[0]
+    const sent = row && row.seq !== null && canReadSeq(m.value, row.seq)
+    if (!row || !(sent || row.by === p)) return err('not_found')
+    if (!small) return ok({ type: row.type, data: this.parts(id, 'full') })
+    if (row.thumb) return ok({ type: 'image/png', data: this.parts(id, 'thumb') })
+    return row.type === 'image/png' ? ok({ type: row.type, data: this.parts(id, 'full') }) : err('not_found')
+  }
+
+  private dropImages(where: string, ...args: (string | number)[]): void {
+    this.sql.exec(`DELETE FROM blob_parts WHERE id IN (SELECT id FROM blobs WHERE ${where})`, ...args)
+    this.sql.exec(`DELETE FROM blobs WHERE ${where}`, ...args)
+  }
+
   /** One message someone else wrote, as this member may see it (I12): what a person needs to hand it to their agent. */
   async message(p: PrincipalId, id: EventId): Promise<Result<{ seq: number; ts: number; sender: string; text: string }>> {
     const m = this.member(p)
@@ -379,7 +446,7 @@ export class ConversationDO extends DurableObject<Env> {
     const e = this.rows(`id = ?`, id)[0]
     if (!e || e.body.kind !== 'message' || e.seq < m.value.fromSeq || m.value.leftSeq !== null) return err('not_found')
     if (e.body.author.alias === m.value.alias) return err('bad_request', 'own message')
-    return ok({ seq: e.seq, ts: e.ts, sender: this.state.members[e.body.author.alias]?.handle ?? '', text: e.body.text })
+    return ok({ seq: e.seq, ts: e.ts, sender: this.state.members[e.body.author.alias]?.handle ?? '', text: e.body.text || '[picture]' })
   }
 
   /** Alias ids for handles, for agent drafts. Unknown handles are an error naming them. */

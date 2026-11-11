@@ -14,7 +14,8 @@ import { TOKEN_PREFIX, revokeGrants } from '../auth/oauth'
 import { addOptions, addVerify, assertOptions, assertVerify, registerOptions, registerVerify } from '../auth/passkey'
 import { adoptSession, clearCookie, endDeviceSessions, endSession, issueSession, readSession, sessionCookie, type Session } from '../auth/session'
 import { deviceView, directory } from '../directory'
-import { openSignup, origin, rememberHours, type Env } from '../env'
+import { imagesOn, imagesPerDay, openSignup, origin, rememberHours, type Env } from '../env'
+import { fromBase64, sniffImage, toBase64 } from '../image'
 import { pushConfigured } from '../push'
 import { acceptInvite, bootstrap, createConv, declineInvite, inviteByCode, inviteCard, inviteLink, inviteMember, inviteOpenTo, roomLink, signup } from '../services/convs'
 import { approveDraft } from '../services/drafts'
@@ -50,6 +51,7 @@ const zId = <T extends string>(check: (v: unknown) => v is T) => z.string().refi
 const zEvent = zId(isEventId)
 const zAliasRef = z.object({ conv: zId(isConvId), alias: zId(isAliasId) })
 const zText = z.string().min(1).max(LIMITS.message * 4)
+const THUMB_BYTES = 600 * 1024
 const zWebAuthn = z.object({ id: z.string().min(1).max(64), response: z.record(z.string(), z.unknown()) })
 
 export const api = new Hono<App>().basePath('/api')
@@ -121,7 +123,7 @@ api.get('/join/:code/check', publicRead, async (c) => {
 })
 
 /** What a signed-out visitor may know about this server. */
-api.get('/site', publicRead, (c) => c.json({ signup: openSignup(c.env), notice: (c.env.SITE_NOTICE ?? '').slice(0, 200) }))
+api.get('/site', publicRead, (c) => c.json({ images: imagesOn(c.env), signup: openSignup(c.env), notice: (c.env.SITE_NOTICE ?? '').slice(0, 200) }))
 
 /** Open sign-up, if the operator allows it: an invitation to a room of your own. */
 api.post('/signup', publicWrite, async (c) => send(c, await signup(c.env), 201))
@@ -365,18 +367,66 @@ api.get('/convs/:id/events', anyHuman, async (c) => {
   return send(c, await conv(c, param(c, 'id', isConvId)).events(me(c), q))
 })
 
+// -- pictures ------------------------------------------------------------------------------
+
+const zImageId = z.string().regex(/^b_[0-9a-f]{32}$/)
+
+/**
+ * Upload a picture to send with the next message. The type and size are read from the
+ * bytes; what the client says about them is ignored. Capped per picture and per person per day.
+ */
+api.post('/convs/:id/images', anyHuman, async (c) => {
+  if (!imagesOn(c.env)) return fail('not_found')
+  const id = param(c, 'id', isConvId)
+  const input = await body(c, z.object({ data: z.string().min(16).max(Math.ceil(LIMITS.image.bytes * 1.4)), thumb: z.string().max(THUMB_BYTES * 1.4).nullable().default(null) }))
+  const [data, thumb] = [fromBase64(input.data), input.thumb === null ? null : fromBase64(input.thumb)]
+  if (!data || data.length > LIMITS.image.bytes) return fail('text_too_large')
+  const found = sniffImage(data)
+  if (!found || found.w > LIMITS.image.side || found.h > LIMITS.image.side) return fail('bad_request', 'image')
+  // A preview is a small PNG or it is nothing.
+  const small = thumb && thumb.length <= THUMB_BYTES && sniffImage(thumb)?.type === 'image/png' ? thumb : null
+  const day = Math.floor(Date.now() / 86_400_000)
+  const counted = await c.env.DB.prepare(
+    `INSERT INTO uploads (principal, day, n, bytes) VALUES (?, ?, 1, ?)
+     ON CONFLICT(principal, day) DO UPDATE SET n = n + 1, bytes = bytes + excluded.bytes WHERE n < ? RETURNING n`,
+  ).bind(me(c), day, data.length, imagesPerDay(c.env)).first<{ n: number }>()
+  if (!counted) return fail('rate_limited')
+  const r = await conv(c, id).putImage(me(c), { ...found, data, thumb: small })
+  return send(c, r.ok ? ok({ image: r.value }) : r, 201)
+})
+
+api.get('/convs/:id/images/:image', anyHuman, async (c) => {
+  const id = param(c, 'id', isConvId)
+  const image = zImageId.safeParse(c.req.param('image'))
+  if (!image.success) return fail('not_found')
+  const asText = c.req.query('as') === 'base64' // for a terminal, which draws from PNG bytes it is handed
+  const r = await conv(c, id).image(me(c), image.data, c.req.query('small') === '1' || asText)
+  if (!r.ok) return send(c, r)
+  if (asText) return c.json({ type: r.value.type, data: toBase64(r.value.data) })
+  // Served as exactly what the bytes are, never executed, never framed, kept by this person's browser only.
+  return new Response(r.value.data, {
+    headers: {
+      'Content-Type': r.value.type, 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox",
+      'Content-Disposition': 'inline', 'Cache-Control': 'private, max-age=31536000, immutable', 'Cross-Origin-Resource-Policy': 'same-origin',
+    },
+  })
+})
+
 api.post('/convs/:id/messages', anyHuman, async (c) => {
   const id = param(c, 'id', isConvId)
   const input = await body(c, z.object({
-    id: zEvent, text: zText, to: z.array(zId(isAliasId)).max(LIMITS.recipients).default([]),
+    images: z.array(zImageId).max(LIMITS.image.perMessage).default([]),
+    id: zEvent, text: z.string().max(LIMITS.message * 4), to: z.array(zId(isAliasId)).max(LIMITS.recipients).default([]),
     to_handles: z.array(z.string().max(100)).max(LIMITS.recipients).default([]), cause: zEvent.nullable().default(null),
   }))
   const named = input.to_handles.length > 0 ? await conv(c, id).resolveHandles(me(c), input.to_handles) : ok<AliasId[]>([])
   if (!named.ok) return send(c, named)
+  const images = input.images.length > 0 ? await conv(c, id).unsentImages(me(c), input.images) : ok([])
+  if (!images.ok) return send(c, images)
   // I1, first gate: a `human` session writes directly.
   const r = await conv(c, id).exec(id, {
     t: 'post', id: input.id, principal: me(c), path: { kind: 'human' }, text: input.text,
-    to: [...(input.to as AliasId[]), ...named.value], cause: input.cause,
+    to: [...(input.to as AliasId[]), ...named.value], cause: input.cause, ...(images.value.length > 0 ? { images: images.value } : {}),
   })
   return send(c, r.ok ? ok({ event: r.events[0] }) : err(r.error, r.detail), 201)
 })
@@ -634,7 +684,7 @@ admin.post('/wipe', async (c) => {
     await c.env.DB.batch(['credentials', 'sessions', 'devices', 'human_links'].map((t) => c.env.DB.prepare(`DELETE FROM ${t} WHERE principal = ?`).bind(r.id)).concat(c.env.DB.prepare(`DELETE FROM principals WHERE id = ?`).bind(r.id)))
   }
   if (people.length === BATCH) return c.json({ left: 'accounts' })
-  await c.env.DB.batch(['invites', 'challenges', 'human_links', 'sessions'].map((t) => c.env.DB.prepare(`DELETE FROM ${t}`)))
+  await c.env.DB.batch(['invites', 'challenges', 'human_links', 'sessions', 'uploads'].map((t) => c.env.DB.prepare(`DELETE FROM ${t}`)))
   const keys = await c.env.OAUTH_KV.list({ limit: 30 })
   await Promise.all(keys.keys.map((k) => c.env.OAUTH_KV.delete(k.name)))
   return c.json({ left: keys.list_complete ? 0 : 'grants' })

@@ -48,7 +48,10 @@ const text = fc.string({ minLength: 1, maxLength: 12 }).map((s) => `x${s}`)
 const op: fc.Arbitrary<Op> = fc.oneof(
   { weight: 8, arbitrary: fc.tuple(nat, nat, nat, wild, text).map(([who, kind, i, w, text]): Op => (id, sim) => {
       const principal = somebody(sim, who, w)
-      return { t: 'post', id, principal, path: pathFor(sim, principal, kind, i, w), text, to: [], cause: null }
+      // One post in four carries pictures: mostly from a person, sometimes (wild) from whatever path came up, sometimes too many.
+      const path = pathFor(sim, principal, i % 4 === 0 && !w ? 0 : kind, i, w)
+      const images = i % 4 === 0 ? Array.from({ length: w ? (i % 7) + 1 : (i % 3) + 1 }, (_, n) => ({ id: `b${i}_${n}`, type: 'image/png' as const, bytes: 10 + n, w: 4, h: 3 })) : undefined
+      return { t: 'post', id, principal, path, text: images && i % 8 === 0 ? '' : text, to: [], cause: null, ...(images ? { images } : {}) }
     }) },
   { weight: 2, arbitrary: fc.tuple(nat, nat).map(([who, i]): Op => (id) => {
       const k = who % PEOPLE.length
@@ -233,6 +236,18 @@ describe('conversation log invariants', () => {
       for (const a of all) for (const b of all) if (a.principal !== b.principal) expect(a.handle.toLowerCase()).not.toBe(b.handle.toLowerCase())
     }))
 
+  it('only a person attaches pictures, at most four, and a message is never empty', () =>
+    prop(({ log }) => {
+      for (const e of log) {
+        if (e.body.kind !== 'message') continue
+        const images = e.body.images ?? []
+        if (images.length > 0) expect(e.body.author.kind).toBe('human')
+        expect(images.length).toBeLessThanOrEqual(4)
+        expect(new Set(images.map((i) => i.id)).size).toBe(images.length)
+        expect(e.body.text.trim() !== '' || images.length > 0).toBe(true)
+      }
+    }))
+
   it('a rename changes one member\'s label and nothing else', () =>
     prop(({ log }) =>
       replay(log, (before, e) => {
@@ -256,6 +271,8 @@ describe('generator coverage', () => {
     expect(count((s) => Object.values(s.state.notes).some((n) => n.revs.some((r) => r.adoptedSeq !== null)))).toBeGreaterThan(10)
     expect(count((s) => kinds(s).some((b) => b.kind === 'member_joined' && b.via === 'invite'))).toBeGreaterThan(10)
     expect(count((s) => kinds(s).some((b) => b.kind === 'member_renamed'))).toBeGreaterThan(10)
+    expect(count((s) => kinds(s).some((b) => b.kind === 'message' && (b.images?.length ?? 0) > 0))).toBeGreaterThan(10)
+    expect(count((s) => kinds(s).some((b) => b.kind === 'message' && b.text === '' && (b.images?.length ?? 0) > 0))).toBeGreaterThan(3)
   })
 })
 

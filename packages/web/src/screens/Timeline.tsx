@@ -5,7 +5,8 @@ import { newEventId, type AliasId, type ConvEvent, type ConvId, type ConvView, t
 import { api, type Outgoing } from '../api'
 import type { Names } from '../data'
 import { t } from '../i18n'
-import { ErrorNote, Loading } from '../ui'
+import { prepare } from '../images'
+import { ErrorNote, Loading, useSite } from '../ui'
 import { errText, finePointer, fmtTime } from '../util'
 
 export type Pending = Outgoing & { failed: unknown } // failed === null: on its way
@@ -81,15 +82,15 @@ export const useTimeline = (id: ConvId, tick: number, at: number | null) => {
       setPending((p) => p.map((x) => (x.id === m.id ? { ...x, failed: e } : x)))
     }
   }
-  const send = (text: string, to: AliasId[], cause: EventId | null) => {
-    const m: Outgoing = { id: newEventId(), text, to, cause }
+  const send = (text: string, to: AliasId[], cause: EventId | null, images: string[] = []) => {
+    const m: Outgoing = { id: newEventId(), text, to, cause, ...(images.length > 0 ? { images } : {}) }
     setPending((p) => [...p, { ...m, failed: null }])
     void deliver(m)
   }
   /** Same id on purpose: the server deduplicates on it. */
   const retry = (m: Pending) => {
     setPending((p) => p.map((x) => (x.id === m.id ? { ...x, failed: null } : x)))
-    void deliver({ id: m.id, text: m.text, to: m.to, cause: m.cause })
+    void deliver({ id: m.id, text: m.text, to: m.to, cause: m.cause, ...(m.images ? { images: m.images } : {}) })
   }
   const discard = (m: Pending) => setPending((p) => p.filter((x) => x.id !== m.id))
 
@@ -121,13 +122,13 @@ const systemText = (e: ConvEvent, name: Names): string | null => {
   }
 }
 
-type RowProps = { e: ConvEvent; me: AliasId; name: Names; quote: string | null; receipt: ReceiptState | null; focused: boolean; onReply: (() => void) | null; onAsk: (() => Promise<unknown>) | null }
+type RowProps = { e: ConvEvent; me: AliasId; name: Names; quote: string | null; receipt: ReceiptState | null; focused: boolean; conv: ConvId; onReply: (() => void) | null; onAsk: (() => Promise<unknown>) | null }
 
-const MessageRow = ({ e, me, name, quote, receipt, focused, onReply, onAsk }: RowProps) => {
+const MessageRow = ({ e, me, name, quote, receipt, focused, conv, onReply, onAsk }: RowProps) => {
   const [asked, setAsked] = useState<'no' | 'yes' | 'failed'>('no')
   if (e.body.kind !== 'message') return null
   const ask = () => void onAsk?.().then(() => setAsked('yes'), () => setAsked('failed'))
-  const { author, text, to, cause } = e.body
+  const { author, text, to, cause, images = [] } = e.body
   const via = author.kind === 'human' ? null : t(author.kind === 'delegate' ? 'msg.delegate' : 'msg.autonomous')
   return (
     <li class={`msg${author.alias === me ? ' mine' : ''}${focused ? ' focused' : ''}`} data-testid="msg" data-seq={e.seq}>
@@ -137,7 +138,16 @@ const MessageRow = ({ e, me, name, quote, receipt, focused, onReply, onAsk }: Ro
         <time class="muted small" dateTime={new Date(e.ts).toISOString()}>{fmtTime(e.ts)}</time>
       </div>
       {cause ? <div class="quote small">↩ {quote ?? t('msg.reply')}</div> : null}
-      <div class="msg-text">{text}</div>
+      {text ? <div class="msg-text">{text}</div> : null}
+      {images.length > 0 ? (
+        <div class="msg-images">
+          {images.map((i) => (
+            <a key={i.id} href={`/api/convs/${conv}/images/${i.id}`} target="_blank" rel="noopener">
+              <img src={`/api/convs/${conv}/images/${i.id}`} width={i.w} height={i.h} loading="lazy" alt={t('msg.picture', { who: name(author.alias) })} data-testid="msg-image" />
+            </a>
+          ))}
+        </div>
+      ) : null}
       <div class="msg-foot muted small">
         {to.length > 0 ? <span>{t('msg.to', { who: to.map((a) => `@${name(a)}`).join(' ') })}</span> : null}
         {receipt ? <span class="receipt">{t(`receipt.${receipt}`)}</span> : null}
@@ -207,7 +217,7 @@ export const Timeline = ({ view, tl, name, focus, onReply, onBottom }: TimelineP
             return (
               <MessageRow
                 key={e.id} e={e} me={view.me} name={name} quote={quote} receipt={e.body.kind === 'message' && e.body.author.alias === view.me ? (receipts.get(e.id) ?? null) : null /* what the other person did with MY message; my own state is not a receipt */}
-                focused={e.seq === focus} onReply={onReply ? () => onReply(e) : null}
+                focused={e.seq === focus} conv={view.id} onReply={onReply ? () => onReply(e) : null}
                 onAsk={onReply ? () => api.messageHandoff(view.id, e.id, 'readonly') : null}
               />
             )
@@ -217,7 +227,7 @@ export const Timeline = ({ view, tl, name, focus, onReply, onBottom }: TimelineP
         })}
         {tl.pending.map((m) => (
           <li key={m.id} class={`msg mine ${m.failed ? 'failed' : 'sending'}`} data-testid="msg-pending">
-            <div class="msg-text">{m.text}</div>
+            <div class="msg-text">{m.text}{m.images?.length ? ` ${t('composer.withPictures', { n: m.images.length })}` : ''}</div>
             <div class="msg-foot small">
               {m.failed ? (
                 <>
@@ -255,11 +265,40 @@ export const mentioned = (text: string, members: MemberView[]): MemberView[] => 
 type ComposerProps = {
   members: MemberView[] // who can be addressed: active, not me
   reply: string | null; onCancelReply: () => void
-  onSend: (text: string, to: AliasId[]) => void
+  conv: ConvId
+  onSend: (text: string, to: AliasId[], images: string[]) => void
 }
 
-export const Composer = ({ members, reply, onCancelReply, onSend }: ComposerProps) => {
+type Shot = { id: string; url: string }
+const MAX_SHOTS = 4
+
+export const Composer = ({ members, reply, onCancelReply, conv, onSend }: ComposerProps) => {
   const [text, setText] = useState('')
+  const [shots, setShots] = useState<Shot[]>([])
+  const [uploading, setUploading] = useState(0)
+  const [problem, setProblem] = useState<string | null>(null)
+  const canAttach = useSite()?.images !== false
+  const picker = useRef<HTMLInputElement>(null)
+  // A pasted or chosen picture is uploaded at once and waits here until the message is sent.
+  const attach = (files: Blob[]) => {
+    const room = MAX_SHOTS - shots.length - uploading
+    if (files.length === 0 || !canAttach) return
+    if (room <= 0) return setProblem(t('composer.tooMany', { n: MAX_SHOTS }))
+    setProblem(null)
+    for (const file of files.slice(0, room)) {
+      setUploading((n) => n + 1)
+      void prepare(file)
+        .then(async (p) => ({ id: (await api.uploadImage(conv, p.data, p.thumb)).image.id, url: p.url }))
+        .then((shot) => setShots((s) => [...s, shot]), (e) => setProblem(e instanceof Error && e.message === 'not_an_image' ? t('composer.notImage') : e instanceof Error && e.message === 'too_large' ? t('composer.tooLarge') : errText(e)))
+        .finally(() => setUploading((n) => n - 1))
+    }
+  }
+  const onPaste = (e: ClipboardEvent) => {
+    const files = [...(e.clipboardData?.files ?? [])].filter((f) => f.type.startsWith('image/'))
+    if (files.length === 0) return
+    e.preventDefault()
+    attach(files)
+  }
   const [query, setQuery] = useState<string | null>(null)
   const [index, setIndex] = useState(0)
   const area = useRef<HTMLTextAreaElement>(null)
@@ -284,8 +323,10 @@ export const Composer = ({ members, reply, onCancelReply, onSend }: ComposerProp
   }
   const submit = () => {
     const body = text.trim()
-    if (body === '') return
-    onSend(body, to.map((m) => m.alias))
+    if ((body === '' && shots.length === 0) || uploading > 0) return
+    onSend(body, to.map((m) => m.alias), shots.map((s) => s.id))
+    setShots([])
+    setProblem(null)
     setText('')
     setQuery(null)
     area.current?.focus()
@@ -324,16 +365,35 @@ export const Composer = ({ members, reply, onCancelReply, onSend }: ComposerProp
           ))}
         </ul>
       ) : null}
+      {shots.length > 0 || uploading > 0 ? (
+        <div class="shots">
+          {shots.map((s) => (
+            <span key={s.id} class="shot">
+              <img src={s.url} alt={t('composer.attached')} />
+              <button type="button" class="link" aria-label={t('composer.removePicture')} onClick={() => setShots((all) => all.filter((x) => x.id !== s.id))}>×</button>
+            </span>
+          ))}
+          {uploading > 0 ? <span class="muted small" role="status">{t('composer.uploading')}</span> : null}
+        </div>
+      ) : null}
+      {problem ? <p class="error small" role="alert">{problem}</p> : null}
       <div class="composer-row">
+        {canAttach ? (
+          <>
+            <input ref={picker} type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden data-testid="pick-image"
+              onChange={(e) => { attach([...(e.currentTarget.files ?? [])]); e.currentTarget.value = '' }} />
+            <button type="button" class="attach" title={t('composer.attach')} aria-label={t('composer.attach')} onClick={() => picker.current?.click()}>＋</button>
+          </>
+        ) : null}
         <textarea
           ref={area} data-testid="composer" rows={Math.min(8, Math.max(1, text.split('\n').length))} value={text}
           aria-label={t('composer.label')} placeholder={t('composer.placeholder')}
-          onInput={(e) => track(e.currentTarget)} onKeyDown={onKeyDown} onBlur={() => setQuery(null)}
+          onInput={(e) => track(e.currentTarget)} onKeyDown={onKeyDown} onBlur={() => setQuery(null)} onPaste={onPaste}
         />
-        <button type="submit" class="primary" data-testid="send" disabled={text.trim() === ''}>{t('composer.send')}</button>
+        <button type="submit" class="primary" data-testid="send" disabled={(text.trim() === '' && shots.length === 0) || uploading > 0}>{t('composer.send')}</button>
       </div>
       <div class="muted small" aria-live="polite">
-        {to.length > 0 ? t('composer.to', { who: to.map((m) => `@${m.handle}`).join(' ') }) : t('composer.hint')}
+        {to.length > 0 ? t('composer.to', { who: to.map((m) => `@${m.handle}`).join(' ') }) : t(canAttach ? 'composer.hintPictures' : 'composer.hint')}
       </div>
     </form>
   )

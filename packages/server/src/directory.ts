@@ -115,6 +115,7 @@ export const directory = (env: Env) => {
       db.prepare(`DELETE FROM challenges WHERE expires_at <= ?`).bind(Date.now()),
       db.prepare(`DELETE FROM sessions WHERE expires_at <= ?`).bind(Date.now()),
       db.prepare(`DELETE FROM human_links WHERE expires_at <= ?`).bind(Date.now()),
+      db.prepare(`DELETE FROM uploads WHERE day < ?`).bind(Math.floor(Date.now() / 86_400_000) - 1),
       db.prepare(`DELETE FROM invites WHERE expires_at <= ? AND used_at IS NULL`).bind(Date.now() - 30 * 86_400_000),
     ]),
   }

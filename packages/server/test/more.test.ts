@@ -1,6 +1,6 @@
 import { runDurableObjectAlarm, runInDurableObject } from 'cloudflare:test'
 import { env } from 'cloudflare:workers'
-import type { ConvId } from '@sudare/protocol'
+import { newEventId, type ConvId } from '@sudare/protocol'
 import { describe, expect, it } from 'vitest'
 import { validPushEndpoint } from '../src/push'
 import { ADMIN, ORIGIN, agentFor, db, eventually, founder, invite, joinByLink, raw, type Person } from './harness'
@@ -226,13 +226,13 @@ describe('a public demo server', () => {
 
   it('has no sign-up unless the operator turned it on', async () => {
     expect((await anon('/signup')).status).toBe(404)
-    expect(await raw('/api/site').then((r) => r.json())).toEqual({ signup: false, notice: '' })
+    expect(await raw('/api/site').then((r) => r.json())).toEqual({ images: true, signup: false, notice: '' })
   })
 
   it('with sign-up on, a stranger gets an account and a room of their own, up to the daily limit', async () => {
     const already = (await db.prepare(`SELECT count(*) AS n FROM principals`).first<{ n: number }>())!.n
     await withSignup({ OPEN_SIGNUP: 'on', SIGNUP_DAILY_LIMIT: String(already + 2), SITE_NOTICE: 'Demo server.' }, async () => {
-      expect(await raw('/api/site').then((r) => r.json())).toEqual({ signup: true, notice: 'Demo server.' })
+      expect(await raw('/api/site').then((r) => r.json())).toEqual({ images: true, signup: true, notice: 'Demo server.' })
       const offer = await anon('/signup')
       expect(offer.status).toBe(201)
       const { code } = await offer.json<{ code: string }>()
@@ -337,5 +337,83 @@ describe('handing any message to your agent', () => {
     expect((await eve.post(`/convs/${conv}/messages/${said}/handoff`)).status).toBeGreaterThanOrEqual(403)
     // An agent cannot do this for itself.
     expect((await raw(`/api/convs/${conv}/messages/${said}/handoff`, { method: 'POST', headers: { Authorization: `Bearer ${agent.token}`, Origin: ORIGIN, 'Content-Type': 'application/json' }, body: '{}' })).status).toBe(401)
+  })
+})
+
+describe('pictures in messages', () => {
+  const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='
+  const GIF = 'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
+  const get = (who: Person, path: string) => raw(`/api${path}`, { headers: { Cookie: who.cookie } })
+
+  it('a member uploads, sends, and exactly the people who can read the message can fetch the picture', async () => {
+    const { who: ann, conv } = await founder()
+    const bob = await invite(ann, conv, 'bob')
+    const up = await ann.post(`/convs/${conv}/images`, { data: PNG })
+    expect(up.status).toBe(201)
+    expect(up.body.image).toMatchObject({ type: 'image/png', w: 1, h: 1, bytes: 70 })
+    const image = up.body.image.id
+    // Until it is sent, only the uploader can see it, and nobody else can send it.
+    expect((await get(ann, `/convs/${conv}/images/${image}`)).status).toBe(200)
+    expect((await get(bob, `/convs/${conv}/images/${image}`)).status).toBe(404)
+    await expect(bob.send(conv, 'mine now', { images: [image] })).rejects.toThrow(/bad_request/)
+
+    const said = await ann.send(conv, '', { images: [image] }) // a picture needs no words
+    const event = (await bob.get(`/convs/${conv}/events?limit=50`)).body.events.find((e: any) => e.id === said)
+    expect(event.body.images).toEqual([up.body.image])
+    const got = await get(bob, `/convs/${conv}/images/${image}`)
+    expect([got.status, got.headers.get('Content-Type'), got.headers.get('X-Content-Type-Options')]).toEqual([200, 'image/png', 'nosniff'])
+    expect(got.headers.get('Content-Security-Policy')).toContain("default-src 'none'")
+    expect(new Uint8Array(await got.arrayBuffer()).length).toBe(70)
+    expect((await bob.get(`/convs/${conv}/images/${image}?as=base64`)).body).toEqual({ type: 'image/png', data: PNG })
+    // Sent once: it cannot be attached again.
+    await expect(ann.send(conv, 'again', { images: [image] })).rejects.toThrow(/bad_request/)
+
+    // I12: someone who joins later cannot fetch what was sent before; an outsider and an agent cannot at all.
+    const cat = await invite(ann, conv, 'cat')
+    expect((await get(cat, `/convs/${conv}/images/${image}`)).status).toBe(404)
+    const { who: eve } = await founder('eve')
+    expect((await get(eve, `/convs/${conv}/images/${image}`)).status).toBeGreaterThanOrEqual(403)
+    const agent = await agentFor(bob)
+    expect((await raw(`/api/convs/${conv}/images/${image}`, { headers: { Authorization: `Bearer ${agent.token}` } })).status).toBe(401)
+    expect((await raw(`/api/convs/${conv}/images`, { method: 'POST', headers: { Authorization: `Bearer ${agent.token}`, Origin: ORIGIN, 'Content-Type': 'application/json' }, body: JSON.stringify({ data: PNG }) })).status).toBe(401)
+    // Leaving a room ends access to its pictures, as it does to its messages.
+    const later = (await ann.post(`/convs/${conv}/images`, { data: GIF })).body.image
+    expect(later).toMatchObject({ type: 'image/gif', w: 1, h: 1 })
+    await bob.post(`/convs/${conv}/leave`)
+    await ann.send(conv, 'after bob left', { images: [later.id] })
+    expect((await get(bob, `/convs/${conv}/images/${image}`)).status).toBe(403)
+    expect((await get(bob, `/convs/${conv}/images/${later.id}`)).status).toBe(403)
+    expect((await get(cat, `/convs/${conv}/images/${later.id}`)).status).toBe(200)
+  })
+
+  it('stores only what the bytes are, within the caps', async () => {
+    const { who: ann, conv } = await founder()
+    const svg = btoa('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>')
+    expect((await ann.post(`/convs/${conv}/images`, { data: svg })).status).toBe(400)
+    expect((await ann.post(`/convs/${conv}/images`, { data: btoa('just some text, not a picture at all') })).status).toBe(400)
+    // A preview that is not a PNG is dropped, not stored.
+    const up = await ann.post(`/convs/${conv}/images`, { data: GIF, thumb: btoa('<html>not a png</html>') })
+    expect(up.status).toBe(201)
+    await ann.send(conv, 'gif', { images: [up.body.image.id] })
+    expect((await get(ann, `/convs/${conv}/images/${up.body.image.id}?small=1`)).status).toBe(404)
+    const withPreview = await ann.post(`/convs/${conv}/images`, { data: GIF, thumb: PNG })
+    expect((await get(ann, `/convs/${conv}/images/${withPreview.body.image.id}?small=1`)).headers.get('Content-Type')).toBe('image/png')
+    // Five in one message is one too many.
+    const five = await Promise.all([1, 2, 3, 4, 5].map(async () => (await ann.post(`/convs/${conv}/images`, { data: PNG })).body.image.id))
+    expect((await ann.post(`/convs/${conv}/messages`, { id: newEventId(), text: 'x', images: five })).status).toBe(400)
+
+    const e = env as any
+    const before = { IMAGES: e.IMAGES, IMAGES_PER_DAY: e.IMAGES_PER_DAY }
+    try {
+      const { who: dan, conv: room } = await founder('dan')
+      e.IMAGES_PER_DAY = '1'
+      expect((await dan.post(`/convs/${room}/images`, { data: PNG })).status).toBe(201)
+      expect((await dan.post(`/convs/${room}/images`, { data: PNG })).status).toBe(429)
+      e.IMAGES = 'off'
+      expect((await dan.post(`/convs/${room}/images`, { data: PNG })).status).toBe(404)
+      expect(await raw('/api/site').then((r) => r.json<any>())).toMatchObject({ images: false })
+    } finally {
+      Object.assign(e, before)
+    }
   })
 })

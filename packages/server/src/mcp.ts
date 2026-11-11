@@ -43,7 +43,7 @@ const shape = (events: ConvEvent[], members: ConvView['members']) => {
     const base = { seq: e.seq, id: e.id, ts: e.ts, kind: b.kind }
     switch (b.kind) {
       case 'message':
-        return { ...base, from: name(b.author.alias), via: b.author.kind, to: b.to.map(name), in_reply_to: b.cause, untrusted_text: b.text }
+        return { ...base, from: name(b.author.alias), via: b.author.kind, to: b.to.map(name), in_reply_to: b.cause, untrusted_text: b.text, ...(b.images?.length ? { pictures: b.images.length } : {}) }
       case 'note_revision':
         return { ...base, note: b.note, rev: b.rev, from: name(b.author.alias), via: b.author.kind, untrusted_title: b.title }
       case 'note_endorsed':

@@ -10,7 +10,8 @@
 // TLA+ spec can speak about exactly the code that runs in production.
 
 import {
-  LIMITS,
+  IMAGE_TYPES, LIMITS,
+  type ImageRef,
   type Author, type Budget, type ConvBody, type ConvPrivate, type InvitePolicy,
   type ReceiptState, type RoundCloseReason, type StoredConvEvent,
 } from './events'
@@ -247,7 +248,7 @@ export type Command =
   | { t: 'set_retention'; id: EventId; principal: PrincipalId; days: number }
   | {
       t: 'post'; id: EventId; principal: PrincipalId; path: WritePath
-      text: string; to: AliasId[]; cause: EventId | null
+      text: string; to: AliasId[]; cause: EventId | null; images?: ImageRef[]
     }
   | { t: 'receipt'; id: EventId; principal: PrincipalId; of: EventId; state: ReceiptState }
   | { t: 'round_open'; id: EventId; principal: PrincipalId; round: RoundId; goal: string; budget: Budget }
@@ -324,11 +325,20 @@ const authorOf = (m: Member, path: WritePath): Author =>
 
 const privateOf = (path: WritePath): ConvPrivate => (path.kind === 'delegate' ? { draft: path.draft } : {})
 
+const whole = (n: number, max: number): boolean => Number.isInteger(n) && n >= 1 && n <= max
+const validImage = (i: ImageRef): boolean =>
+  typeof i.id === 'string' && i.id.length > 0 && i.id.length <= 64 && (IMAGE_TYPES as readonly string[]).includes(i.type) &&
+  whole(i.bytes, LIMITS.image.bytes) && whole(i.w, LIMITS.image.side) && whole(i.h, LIMITS.image.side)
+
 const decidePost = (s: ConvState, c: Extract<Command, { t: 'post' }>, env: DecideEnv): Decision => {
   const m = writer(s, c.principal)
   if (isErr(m)) return reject(m)
   const chars = charCount(c.text)
-  if (c.text.trim() === '') return reject(err('bad_request', 'text'))
+  const images = c.images ?? []
+  if (c.text.trim() === '' && images.length === 0) return reject(err('bad_request', 'text'))
+  // Only a person attaches a picture: an agent's words reach a room as text a person can read before sending.
+  if (images.length > 0 && c.path.kind !== 'human') return reject(err('forbidden_scope', 'images'))
+  if (images.length > LIMITS.image.perMessage || new Set(images.map((i) => i.id)).size !== images.length || !images.every(validImage)) return reject(err('bad_request', 'images'))
   if (chars > LIMITS.message) return reject(err('text_too_large'))
   const to = [...new Set(c.to)]
   if (to.length > LIMITS.recipients) return reject(err('bad_request', 'to'))
@@ -336,7 +346,7 @@ const decidePost = (s: ConvState, c: Extract<Command, { t: 'post' }>, env: Decid
   if (!to.every((a) => active.has(a))) return reject(err('recipient_unknown'))
   const message = emit(
     c.id,
-    { kind: 'message', author: authorOf(m, c.path), text: c.text, to, cause: c.cause },
+    { kind: 'message', author: authorOf(m, c.path), text: c.text, to, cause: c.cause, ...(images.length > 0 ? { images } : {}) },
     privateOf(c.path),
   )
   if (c.path.kind !== 'autonomous') return accept([message])

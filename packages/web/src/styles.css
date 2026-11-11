@@ -216,3 +216,9 @@ select { max-width: 100%; }
 .site-notice { text-align: center; padding: 0.75rem; margin: 0; }
 .quick code .nb { white-space: nowrap; }
 .rows > li { flex-wrap: wrap; } .rename-me { flex-basis: 100%; } .rename-me input { flex: 1; min-width: 8rem; }
+.msg-images { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.3rem; }
+.msg-images img { display: block; max-width: min(100%, 22rem); max-height: 20rem; width: auto; height: auto; border-radius: 0.5rem; border: 1px solid var(--line); background: var(--sunken); }
+.shots { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.shot { position: relative; display: inline-flex; align-items: flex-start; gap: 0.15rem; }
+.shot img { height: 4rem; width: auto; max-width: 8rem; border-radius: 0.4rem; border: 1px solid var(--line); }
+button.attach { min-width: 2.75rem; padding: 0 0.5rem; font-size: 1.2rem; line-height: 1; }

@@ -19,6 +19,11 @@ export type JoinVia = 'creator' | 'fork' | 'invite'
 export type RoundCloseReason = 'budget' | 'expired' | 'closed' | 'note_proposed'
 export type ReceiptState = 'read' | 'handed_off' | 'done'
 
+export const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'] as const
+export type ImageType = (typeof IMAGE_TYPES)[number]
+/** A picture attached to a message. The bytes live with the room; this is what the log says about them. */
+export type ImageRef = { id: string; type: ImageType; bytes: number; w: number; h: number }
+
 export type ConvBody =
   | { kind: 'conv_created'; topic: string; by: AliasId; invite: InvitePolicy; parent: ConvId | null }
   | { kind: 'conv_renamed'; topic: string; by: AliasId }
@@ -27,7 +32,7 @@ export type ConvBody =
   | { kind: 'member_renamed'; alias: AliasId; handle: string; was: string }
   | { kind: 'member_left'; alias: AliasId }
   | { kind: 'conv_archived'; by: AliasId }
-  | { kind: 'message'; author: Author; text: string; to: AliasId[]; cause: EventId | null }
+  | { kind: 'message'; author: Author; text: string; to: AliasId[]; cause: EventId | null; images?: ImageRef[] }
   | { kind: 'receipt'; of: EventId; by: AliasId; state: ReceiptState }
   | { kind: 'round_opened'; round: RoundId; by: AliasId; goal: string; budget: Budget }
   | { kind: 'round_joined'; round: RoundId; alias: AliasId }
@@ -107,6 +112,7 @@ export const LIMITS = {
   goal: 2_000,
   brief: 8_000,
   recipients: 20,
+  image: { perMessage: 4, bytes: 4 * 1024 * 1024, side: 16_384 },
   claimTimeoutMs: 10 * 60_000,
   retentionDaysDefault: 30,
   retentionDaysMax: 3650,

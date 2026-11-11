@@ -150,8 +150,8 @@ export const ConvScreen = ({ id, at }: { id: ConvId; at: number | null }) => {
         <Timeline view={view} tl={tl} name={name} focus={at} onReply={writable ? setReply : null} onBottom={setAtBottom} />
         {writable ? (
           <Composer
-            members={active.filter((m) => !m.me)} reply={replyText} onCancelReply={() => setReply(null)}
-            onSend={(text, to) => { tl.send(text, to, reply?.id ?? null); setReply(null) }}
+            members={active.filter((m) => !m.me)} reply={replyText} onCancelReply={() => setReply(null)} conv={view.id}
+            onSend={(text, to, images) => { tl.send(text, to, reply?.id ?? null, images); setReply(null) }}
           />
         ) : <p class="muted pad center">{t(view.archived ? 'conv.archivedNote' : 'conv.leftNote')}</p>}
       </div>

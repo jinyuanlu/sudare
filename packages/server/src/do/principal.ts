@@ -37,6 +37,9 @@ export type AgentInbox = {
   rounds: { round: RoundId; conv: ConvId; topic: string; goal: string }[]
 }
 
+/** What stands in for a message that is only a picture, wherever only text is shown. */
+const PICTURE = '[picture]'
+
 export class PrincipalDO extends DurableObject<Env> {
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env)
@@ -184,7 +187,7 @@ export class PrincipalDO extends DurableObject<Env> {
           const state: ItemState = { s: 'unread' }
           this.sql.exec(
             `INSERT OR IGNORE INTO items (msg, conv, cseq, ts, sender, text, state, s) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            e.id, d.conv, e.seq, e.ts, sender ?? '', b.text, JSON.stringify(state), state.s,
+            e.id, d.conv, e.seq, e.ts, sender ?? '', b.text || PICTURE, JSON.stringify(state), state.s,
           )
         }
         return addressed

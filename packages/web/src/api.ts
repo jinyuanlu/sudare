@@ -5,6 +5,7 @@ import {
   type AliasId, type AliasRef, type ContactView, type ConvEvent, type ConvId, type ConvSummary, type ConvView, type DeviceId,
   type DeviceView, type DraftId, type DraftView, type ErrorCode, type EventId, type EventsResponse, type HandoffMode,
   type InboxItem, type InviteId, type PendingInvite, type InviteView, type Me, type NoteId, type NoteView, type RoundId, type SearchHit, type SyncResponse,
+  type ImageRef,
 } from '@sudare/protocol'
 import type { PublicKeyCredentialCreationOptionsJSON, PublicKeyCredentialRequestOptionsJSON } from '@simplewebauthn/browser'
 
@@ -56,7 +57,7 @@ const q = (params: Record<string, string | number | null | undefined>): string =
 
 export type Ceremony<O> = { id: string; options: O }
 export type Assertion = { id: string; response: unknown }
-export type Site = { signup: boolean; notice: string }
+export type Site = { signup: boolean; notice: string; images?: boolean }
 export type JoinCheck = { valid: boolean; registered: boolean; topic: string | null; by: string | null; members: number }
 export type JoinCard = Omit<InviteView, 'suggested_handle'> & { suggested_handle: string | null; joined: boolean }
 export type Created = { conv: ConvId; existing: boolean; joined: number; invited: number }
@@ -69,7 +70,7 @@ export type NewConv = {
   topic: string; members: AliasRef[]; parent: ConvId | null; handle: string | null
   first: { id: EventId; text: string } | null; dm?: boolean
 }
-export type Outgoing = { id: EventId; text: string; to: AliasId[]; cause: EventId | null }
+export type Outgoing = { id: EventId; text: string; to: AliasId[]; cause: EventId | null; images?: string[] }
 
 export const api = {
   me: () => get<Me>('/me', { anon: true }),
@@ -105,6 +106,7 @@ export const api = {
   leave: (id: ConvId) => post(`/convs/${id}/leave`),
   archive: (id: ConvId) => post(`/convs/${id}/archive`),
   events: (id: ConvId, page: { before?: number; after?: number; limit?: number }) => get<EventsResponse>(`/convs/${id}/events${q(page)}`),
+  uploadImage: (id: ConvId, data: string, thumb: string | null) => post<{ image: ImageRef }>(`/convs/${id}/images`, { data, thumb }),
   send: (id: ConvId, m: Outgoing) => post<{ event: ConvEvent }>(`/convs/${id}/messages`, m),
   read: (id: ConvId, seq: number) => post(`/convs/${id}/read`, { seq }),
 
