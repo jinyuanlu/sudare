@@ -297,6 +297,11 @@ describe('changing your name in a room', () => {
     // Addressing by the new name works, and the old name no longer reaches anyone.
     await bob.send(conv, 'hi', { to_handles: ['Prospero'] })
     await expect(bob.send(conv, 'hi', { to_handles: ['ann'] })).rejects.toThrow(/recipient_unknown/)
+    // The usual name can be set on its own; it changes no room.
+    expect((await ann.patch('/me', { default_handle: 'two words' })).status).toBe(400)
+    expect((await ann.patch('/me', { default_handle: 'Ariel' })).body).toEqual({ default_handle: 'Ariel' })
+    expect((await ann.get('/me')).body.default_handle).toBe('Ariel')
+    expect((await ann.get(`/convs/${conv}`)).body.members.find((m: any) => m.me).handle).toBe('Prospero')
     // bob cannot rename ann: the route only ever renames the caller.
     await bob.patch(`/convs/${conv}`, { handle: 'Caliban' })
     expect((await ann.get(`/convs/${conv}`)).body.members.map((m: any) => m.handle).sort()).toEqual(['Caliban', 'Prospero'])

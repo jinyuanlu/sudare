@@ -77,6 +77,7 @@ export const api = {
   loginVerify: (a: Assertion) => post('/auth/login/verify', a, { anon: true }),
   registerOptions: (code: string) => post<Ceremony<PublicKeyCredentialCreationOptionsJSON>>('/auth/register/options', { code }, { anon: true }),
   registerVerify: (a: Assertion) => post('/auth/register/verify', a, { anon: true }),
+  setUsualName: (default_handle: string) => request<{ default_handle: string }>('PATCH', '/me', { default_handle }),
   site: () => get<Site>('/site', { anon: true }),
   signup: () => post<{ code: string }>('/signup', {}, { anon: true }),
   logout: () => post('/auth/logout', {}, { anon: true }),

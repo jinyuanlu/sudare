@@ -175,6 +175,14 @@ api.get('/me', anyHuman, async (c) => {
   return c.json(out)
 })
 
+/** The name offered when this person next joins a room. Rooms they are already in keep the name they have there. */
+api.patch('/me', anyHuman, async (c) => {
+  const chosen = normalizeHandle((await body(c, z.object({ default_handle: z.string().min(1).max(100) }))).default_handle)
+  if (!chosen.ok) return send(c, chosen)
+  await c.env.DB.prepare(`UPDATE principals SET default_handle = ? WHERE id = ?`).bind(chosen.value, me(c)).run()
+  return c.json({ default_handle: chosen.value })
+})
+
 api.post('/passkeys/options', web, async (c) => c.json(await addOptions(c.env, me(c))))
 api.post('/passkeys/verify', web, async (c) => {
   const { id, response } = await body(c, zWebAuthn)

@@ -1,11 +1,13 @@
 import { useState } from 'preact/hooks'
 import type { DeviceView } from '@sudare/protocol'
-import { api, type NewToken } from '../api'
+import { normalizeHandle } from '@sudare/protocol'
+import { ApiFailure, api, type NewToken } from '../api'
 import { useAction, useLoad } from '../hooks'
 import { t, type Lang } from '../i18n'
 import { addPasskey } from '../passkey'
 import { navigate } from '../router'
-import { LANG_KEY, setState, signedOut, useStore } from '../store'
+import { randomName } from '../names'
+import { LANG_KEY, loadMe, setState, signedOut, useStore } from '../store'
 import { CopyButton, ErrorNote, Field, Loading, Page, QuickStart } from '../ui'
 import { base64UrlToBytes, fmtDate, isIOS, isStandalone } from '../util'
 
@@ -156,6 +158,42 @@ const Devices = () => {
   )
 }
 
+const UsualName = ({ current }: { current: string | null }) => {
+  const [open, setOpen] = useState(false)
+  const [name, setName] = useState(current ?? '')
+  const act = useAction()
+  const save = (e: Event) => {
+    e.preventDefault()
+    void act.run(async () => {
+      const h = normalizeHandle(name)
+      if (!h.ok) throw new ApiFailure('handle_invalid', 400)
+      await api.setUsualName(h.value)
+      await loadMe()
+      setOpen(false)
+    })
+  }
+  return (
+    <>
+      <p class="row wrap">
+        <span>{t('settings.handle')}: <strong>{current ?? t('settings.noHandle')}</strong></span>
+        {open ? null : <button type="button" data-testid="usual-change" onClick={() => { setName(current ?? randomName()); setOpen(true) }}>{t('settings.handleChange')}</button>}
+      </p>
+      {open ? (
+        <form onSubmit={save}>
+          <div class="row wrap">
+            <input data-testid="usual-input" aria-label={t('settings.handle')} value={name} maxLength={24} required autocomplete="nickname" onInput={(e) => setName(e.currentTarget.value)} />
+            <button type="submit" class="primary" data-testid="usual-save" disabled={act.busy}>{t('members.renameSave')}</button>
+            <button type="button" disabled={act.busy} onClick={() => setOpen(false)}>{t('common.cancel')}</button>
+          </div>
+          <button type="button" class="link" onClick={() => setName(randomName(name))}>{t('join.another')}</button>
+          <ErrorNote error={act.error} />
+        </form>
+      ) : null}
+      <p class="muted small">{t('settings.handleHint')}</p>
+    </>
+  )
+}
+
 export const SettingsScreen = () => {
   const me = useStore((s) => s.me)
   const lang = useStore((s) => s.lang)
@@ -176,8 +214,7 @@ export const SettingsScreen = () => {
     <Page title={t('settings.title')}>
       <section>
         <h2>{t('settings.you')}</h2>
-        <p>{t('settings.handle')}: <strong>{me?.default_handle ?? t('settings.noHandle')}</strong></p>
-        <p class="muted small">{t('settings.handleHint')}</p>
+        <UsualName current={me?.default_handle ?? null} />
         <Field label={t('settings.language')}>
           <select value={lang} onChange={(e) => setLang(e.currentTarget.value === 'zh' ? 'zh' : 'en')}>
             <option value="en">English</option>
