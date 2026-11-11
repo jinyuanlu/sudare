@@ -30,6 +30,8 @@ const firstRun = atom({ plugin: 'sudare', key: 'isNew' } as const, false)
 const kept = atom({ plugin: 'sudare', key: 'isKept' } as const, false)
 /** The short explanation at the top of the panel, shown until the person says they have it. */
 const helpOpen = atom({ plugin: 'sudare', key: 'isHelpOpen' } as const, false)
+// The room the person pressed Leave on and has not yet confirmed.
+const leaving = atom({ plugin: 'sudare', key: 'leaving' } as const, null as string | null)
 
 const HELP = [
   'Write below. Replies show above your prompt.',
@@ -237,7 +239,15 @@ async function post($: Engine, c: Client, path: string, body: Json, done: string
   return r.ok
 }
 
+async function leaveConv($: Engine, c: Client, conv: string, topic: string): Promise<void> {
+  await update($, leaving, () => null)
+  if (!(await post($, c, `/convs/${conv}/leave`, {}, `Left "${clip(topic, 40)}".`))) return
+  await update($, current, () => null)
+  await refresh($, c)
+}
+
 async function openConv($: Engine, c: Client, conv: string): Promise<void> {
+  await update($, leaving, () => null)
   if ((await read($, current)) !== conv) await update($, target, () => null)
   await update($, current, () => conv)
   await refresh($, c, true)
@@ -589,7 +599,8 @@ export const register: Register = (on, options) => {
     const [snap, here, isIn, shown, note] = [await read($, snapshot), await read($, current), await read($, signedIn), await read($, timeline), await read($, notice)]
     const room = Math.max(8, (e.viewport?.rows ?? 30) - snap.convs.length - 12)
     const to = await read($, target)
-    const [form, isHelp] = [await read($, compose), await read($, helpOpen)]
+    const [form, isHelp, asked] = [await read($, compose), await read($, helpOpen), await read($, leaving)]
+    const isLeaving = shown !== null && asked === shown.conv
     const picked = shown?.others.find((o) => o.handle === to) ?? null
     if (!isIn) {
       return (
@@ -701,9 +712,17 @@ export const register: Register = (on, options) => {
             <Button key="new-cancel" label="Cancel" onPress={() => update($, compose, () => ({ isOpen: false, people: [] }))} />
           </Box>
         )}
+        {shown && isLeaving && (
+          <Box gap={2} flexWrap="wrap">
+            <Text>Leave "{clip(shown.topic, 40)}"? You stop receiving it and need a new invitation to come back.</Text>
+            <Button key="leave-yes" variant="primary" label="Leave room" onPress={() => leaveConv($, c, shown.conv, shown.topic)} />
+            <Button key="leave-no" label="Stay" onPress={() => update($, leaving, () => null)} />
+          </Box>
+        )}
         <Box gap={2} flexWrap="wrap">
           {shown && shown.canInvite && <Button key="invite" label="Invite" onPress={() => inviteLink($, c, shown.conv, e.surface)} />}
           {shown && !form.isOpen && <Button key="new" label="New room" onPress={() => update($, compose, () => ({ isOpen: true, people: shown.others.map((o) => o.handle) }))} />}
+          {shown && !isLeaving && <Button key="leave" label="Leave" onPress={() => update($, leaving, () => shown.conv)} />}
           <Button key="web" label="Web" onPress={() => c.open(c.base)} />
           <Button key="help" label="Help" onPress={() => update($, helpOpen, (v) => !v)} />
           <Button key="signout" label="Sign out" onPress={async () => (await c.signOut(), refresh($, c))} />

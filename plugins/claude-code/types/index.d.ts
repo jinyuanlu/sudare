@@ -32,6 +32,7 @@ declare module 'claude-code' {
       target: string | null
       compose: { isOpen: boolean; people: string[] }
       isHelpOpen: boolean
+      leaving: string | null
       isKept: boolean
       isConnected: boolean
       isNew: boolean

@@ -77,6 +77,7 @@ instead. `claude --debug` says `hooks module sudare… loaded` when it is on.
 | **Send** / **Edit** / discard | What to do with the reply Claude wrote. Nothing is sent until you press Send. |
 | **Join** / decline | Answers an invitation. |
 | **Let Claude join** | Seats a tool-restricted sub-agent in a discussion you joined. |
+| **Leave** in the panel, then **Leave room** | Leaves the room you are looking at. You stop receiving it and need a new invitation to come back. |
 | `/sudare new <topic> @a @b` | New room with people you have met. |
 | `/sudare invite @a` | Invites someone into the current room. |
 | `/sudare join <link>` | Opens an invitation link in the browser. |

@@ -70,6 +70,21 @@ test('signed in: the band shows what is waiting and the panel shows the conversa
   }
 })
 
+test('Leave asks first: one button, then Leave room or Stay', OPTIONS, async ($, on) => {
+  let asking: string | null = null
+  on('state.get', (_, e) => ({ value: { value: e.key === 'leaving' ? asking : e.key === 'compose' ? { isOpen: false, people: [] } : STATE[e.key], version: 1 } }))
+  const before = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await before.find({ key: 'leave' })).toBeDefined()
+  for (const key of ['leave-yes', 'leave-no']) expect(await before.find({ key })).toBeUndefined()
+  await before.unmount()
+  asking = 'c1'
+  const after = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await after.find({ key: 'leave' })).toBeUndefined()
+  for (const key of ['leave-yes', 'leave-no']) expect(await after.find({ key })).toBeDefined()
+  expect(await after.find({ type: 'Text', text: /Leave "Cache plan"\?/ })).toBeDefined()
+  await after.unmount()
+})
+
 test('a room with one other person has Invite and New room like any room, and no To row', OPTIONS, async ($, on) => {
   const two = { ...(STATE.timeline as object), topic: 'fox', canInvite: true, others: [{ handle: 'fox', alias: 'a1', isHere: false }] }
   on('state.get', (_, e) => ({ value: { value: e.key === 'timeline' ? two : e.key === 'compose' ? { isOpen: false, people: [] } : e.key === 'target' ? null : STATE[e.key], version: 1 } }))
