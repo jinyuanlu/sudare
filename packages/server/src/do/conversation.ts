@@ -23,6 +23,7 @@ import { DIRECTORY, type DeliveredEvent, type Delivery } from './types'
 const DAY = 86_400_000
 const BATCH = 200
 const PART = 1024 * 1024
+const SMALL = 1536 * 1024
 const LONG_POLL_MS = 25_000
 const RETRY_MIN_MS = 2_000
 const RETRY_MAX_MS = 5 * 60_000
@@ -426,12 +427,13 @@ export class ConversationDO extends DurableObject<Env> {
   async image(p: PrincipalId, id: string, small: boolean): Promise<Result<{ type: ImageType; data: Uint8Array }>> {
     const m = this.member(p)
     if (!m.ok) return m
-    const row = this.sql.exec<{ by: string; type: ImageType; seq: number | null; thumb: number }>(`SELECT by, type, seq, thumb FROM blobs WHERE id = ?`, id).toArray()[0]
+    const row = this.sql.exec<{ by: string; type: ImageType; seq: number | null; thumb: number; bytes: number }>(`SELECT by, type, seq, thumb, bytes FROM blobs WHERE id = ?`, id).toArray()[0]
     const sent = row && row.seq !== null && canReadSeq(m.value, row.seq)
     if (!row || !(sent || row.by === p)) return err('not_found')
     if (!small) return ok({ type: row.type, data: this.parts(id, 'full') })
     if (row.thumb) return ok({ type: 'image/png', data: this.parts(id, 'thumb') })
-    return row.type === 'image/png' ? ok({ type: row.type, data: this.parts(id, 'full') }) : err('not_found')
+    // No preview was made (it came from a terminal): a PNG that is itself small enough serves as its own.
+    return row.type === 'image/png' && row.bytes <= SMALL ? ok({ type: row.type, data: this.parts(id, 'full') }) : err('not_found')
   }
 
   private dropImages(where: string, ...args: (string | number)[]): void {

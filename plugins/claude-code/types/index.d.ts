@@ -14,7 +14,7 @@ export type SudareSnapshot = {
   at: number
 }
 
-export type SudareLine = { id: string; from: string; text: string; via: string; isMine: boolean }
+export type SudareLine = { id: string; from: string; text: string; via: string; isMine: boolean; images?: { id: string; w: number; h: number }[] }
 
 /** The last messages of the conversation the person is looking at. */
 export type SudarePerson = { handle: string; alias: string; isHere: boolean }
@@ -33,6 +33,7 @@ declare module 'claude-code' {
       compose: { isOpen: boolean; people: string[] }
       isHelpOpen: boolean
       leaving: string | null
+      pictureTick: number
       isKept: boolean
       isConnected: boolean
       isNew: boolean

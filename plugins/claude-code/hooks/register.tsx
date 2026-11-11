@@ -30,6 +30,12 @@ const firstRun = atom({ plugin: 'sudare', key: 'isNew' } as const, false)
 const kept = atom({ plugin: 'sudare', key: 'isKept' } as const, false)
 /** The short explanation at the top of the panel, shown until the person says they have it. */
 const helpOpen = atom({ plugin: 'sudare', key: 'isHelpOpen' } as const, false)
+// Pictures the panel can draw, as PNG bytes by picture id; null where there is nothing a terminal can draw.
+// Kept here and not in state: they are large, and they never change.
+const pictures = new Map<string, string | null>()
+const pictureTick = atom({ plugin: 'sudare', key: 'pictureTick' } as const, 0)
+const PICTURES_KEPT = 24
+
 // The room the person pressed Leave on and has not yet confirmed.
 const leaving = atom({ plugin: 'sudare', key: 'leaving' } as const, null as string | null)
 
@@ -109,7 +115,8 @@ const loadTimeline = async (c: Client, conv: string, isSeen: boolean): Promise<S
   const lines = events.flatMap((e): SudareLine[] => {
     const b = e.body as Json
     const author = b.author as Json | undefined
-    if (b.kind === 'message' && author) return [{ id: str(e.id), from: name(author.alias), text: str(b.text), via: str(author.kind), isMine: author.alias === v.me }]
+    const images = list(b.images).map((i) => ({ id: str(i.id), w: num(i.w), h: num(i.h) }))
+    if (b.kind === 'message' && author) return [{ id: str(e.id), from: name(author.alias), text: str(b.text), via: str(author.kind), isMine: author.alias === v.me, ...(images.length > 0 ? { images } : {}) }]
     if (b.kind === 'note_revision' && author) return [{ id: str(e.id), from: name(author.alias), text: `proposed note "${str(b.title)}" (v${num(b.rev)})`, via: 'note', isMine: author.alias === v.me }]
     return []
   })
@@ -138,6 +145,7 @@ async function refresh($: Engine, c: Client, isSeen = false): Promise<void> {
   if (here !== picked) await update($, current, () => here)
   const shown = here && isSignedIn() ? await loadTimeline(c, here, isSeen).catch(() => null) : null
   await update($, timeline, () => shown)
+  if (shown) await loadPictures($, c, shown).catch(() => undefined)
   const waiting = next ? next.inbox.filter((i) => i.state === 'unread').length + next.drafts.length + next.invites.length : 0
   $.ui.status(isSignedIn() && waiting > 0 ? `${waiting} waiting` : undefined)
 }
@@ -251,6 +259,47 @@ async function markSeen($: Engine, c: Client): Promise<void> {
   } finally {
     isMarking = false
   }
+}
+
+/** Fetch the previews of the latest pictures in the room on screen, a few at a time. */
+async function loadPictures($: Engine, c: Client, shown: SudareTimeline): Promise<void> {
+  const wanted = shown.lines.slice(-12).flatMap((l) => l.images ?? []).filter((i) => !pictures.has(i.id)).slice(-4)
+  for (const image of wanted) {
+    const r = await c.api('GET', `/convs/${shown.conv}/images/${image.id}?as=base64`)
+    const body = r.body as Json
+    pictures.set(image.id, r.ok && body.type === 'image/png' ? str(body.data) : null)
+  }
+  for (const id of [...pictures.keys()].slice(0, Math.max(0, pictures.size - PICTURES_KEPT))) pictures.delete(id)
+  if (wanted.length > 0) await update($, pictureTick, (n) => n + 1)
+}
+
+/** One pasted item of the prompt being submitted, whole, as base64. */
+async function pasted($: Engine, id: string): Promise<string | null> {
+  let [data, offset] = ['', 0 as number | undefined]
+  while (offset !== undefined) {
+    const part = await $.prompt.media({ id, offset })
+    if (part.base64 === undefined) return null
+    data += part.base64
+    offset = part.next
+  }
+  return data
+}
+
+/** Upload what was pasted into the prompt and send it to the room on screen: to one person, or to everyone. */
+async function sendPictures($: Engine, c: Client, handle: string | null, text: string, ids: string[]): Promise<string> {
+  const here = await read($, current)
+  if (!here) return 'Not sent: open a room first (press Open on the Sudare line).'
+  const images: string[] = []
+  for (const id of ids.slice(0, 4)) {
+    const data = await pasted($, id)
+    if (!data) return 'Not sent: the picture could not be read.'
+    const r = await c.api('POST', `/convs/${here}/images`, { data })
+    if (!r.ok) return `Not sent: ${r.status === 413 || str((r.body as Json).error) === 'text_too_large' ? 'the picture is over 4 MB' : why(r)}`
+    images.push(str(((r.body as Json).image as Json).id))
+  }
+  const r = await c.api('POST', `/convs/${here}/messages`, { id: newId(), text, images, ...(handle ? { to_handles: [handle] } : {}) })
+  await refresh($, c)
+  return r.ok ? `Sent ${images.length === 1 ? 'the picture' : `${images.length} pictures`}${handle ? ` to @${handle}` : ''}.` : `Not sent: ${why(r)}`
 }
 
 async function leaveConv($: Engine, c: Client, conv: string, topic: string): Promise<void> {
@@ -494,6 +543,15 @@ export const register: Register = (on, options) => {
 
   // "@handle text" + Enter sends directly, with the in-memory human session.
   on('prompt.submit', async ($, e, next) => {
+    // A picture pasted into the prompt goes to the room on screen when the line starts with
+    // @name or @everyone. Anything else stays what it was: a prompt for Claude.
+    const shots = (e.attachments ?? []).flatMap((a) => (a.type === 'image' && a.id ? [a.id] : []))
+    const typed = e.text.replace(/\[Image #\d+\]/g, '').trim()
+    const p = shots.length > 0 ? /^@([^\s@]{1,24})(?:\s+([\s\S]*))?$/.exec(typed) : null
+    if (p && !e.command && !e.isMeta && server !== '' && isSignedIn()) {
+      const everyone = ['everyone', 'all', 'room'].includes(p[1]!.toLowerCase())
+      return { drop: await sendPictures($, makeClient($, server, keep), everyone ? null : p[1]!, (p[2] ?? '').trim(), shots) }
+    }
     const m = /^@([^\s@]{1,24})\s+([\s\S]+)$/.exec(e.text)
     if (!m || e.command || e.isMeta || server === '' || !isSignedIn()) return next(e)
     const outcome = await send($, makeClient($, server, keep), m[1]!, m[2]!.trim())
@@ -616,8 +674,13 @@ export const register: Register = (on, options) => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const { Box, Button, Input, Text } = $.ui.resolve(e)
+    const ui = $.ui.resolve(e)
+    const { Box, Button, Input, Text } = ui
+    // Only a terminal has an element for pictures; `await read` below redraws when one has been fetched.
+    const Picture = 'Image' in ui ? ui.Image : null
+    const wide = Math.max(8, (e.props.bodyColumns ?? 60) - 6)
     if (server === '') return <Text dimColor>Set the Sudare server URL in /config.</Text>
+    await read($, pictureTick)
     const c = makeClient($, server, keep)
     const [snap, here, isIn, shown, note] = [await read($, snapshot), await read($, current), await read($, signedIn), await read($, timeline), await read($, notice)]
     const room = Math.max(8, (e.viewport?.rows ?? 30) - snap.convs.length - 12)
@@ -666,12 +729,26 @@ export const register: Register = (on, options) => {
             {shown.others.length === 0 && <Text>Only you here. Press Invite.</Text>}
             {shown.others.length > 0 && shown.lines.length === 0 && <Text dimColor>No messages yet.</Text>}
             {shown.lines.slice(-room).map((l) => {
-              const line = (
+              const words = (
                 <Text>
                   <Text bold={!l.isMine} dimColor={l.isMine}>{l.isMine ? 'you' : l.from}</Text>
                   {l.via === 'delegate' ? <Text dimColor> via agent</Text> : l.via === 'autonomous' ? <Text dimColor> agent</Text> : ''}
                   <Text dimColor>  </Text>{l.text}
                 </Text>
+              )
+              // A picture is drawn where the terminal can draw one; elsewhere it is named, and the web app shows it.
+              const line = !l.images ? words : (
+                <Box flexDirection="column">
+                  {words}
+                  {l.images.map((i) => {
+                    const png = pictures.get(i.id)
+                    const columns = Math.max(8, Math.min(wide, 64, i.w))
+                    const rows = Math.max(1, Math.min(18, Math.round((columns * i.h) / Math.max(1, i.w) / 2)))
+                    return Picture && png
+                      ? <Picture key={`pic-${i.id}`} source={{ png }} columns={columns} rows={rows} alt={`[picture from ${l.isMine ? 'you' : l.from}]`} />
+                      : <Text dimColor>{png === undefined && Picture ? '[picture, loading]' : '[picture: press Web to see it]'}</Text>
+                  })}
+                </Box>
               )
               // The latest few things other people said can be handed to Claude from here, whoever they were for.
               return askable.includes(l.id)

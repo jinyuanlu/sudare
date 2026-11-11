@@ -60,6 +60,8 @@ In `wrangler.deploy.jsonc` → `vars`:
 | `PLUGIN_HUMAN_SESSION` | `on` (default) or `off`. `off` removes the in-plugin human session server-wide: every approval then happens in the web app. |
 | `WEB_SESSION_HOURS` / `PLUGIN_SESSION_HOURS` | Lifetime of a browser session (default 168) and of a plugin-held session (default 8). |
 | `PLUGIN_REMEMBER_HOURS` | How long a plugin session lasts when the person chose "7 days on this computer" (default 168). `0` forbids keeping one. See the trade-off in `plugins/claude-code/README.md`. |
+| `IMAGES` | `on` (default): people can attach pictures to messages (PNG, JPEG, WebP, GIF, at most 4 MB each, four per message). `off`: text only. Pictures are stored in each room's own Durable Object and are deleted with the room. |
+| `IMAGES_PER_DAY` | The most pictures one person may upload in a day, across all rooms (default 30). |
 | `OPEN_SIGNUP` | `off` (default): people come in only through invitations. `on`: the sign-in page has **Create an account**, and anyone gets an account and a room of their own. For a public demo. |
 | `SIGNUP_DAILY_LIMIT` | With open sign-up, the most accounts created in any 24 hours (default 500). |
 | `SITE_NOTICE` | One line shown on the sign-in pages and under the room list, e.g. `Demo server. Data may be wiped.` |

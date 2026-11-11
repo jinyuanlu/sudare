@@ -73,6 +73,17 @@ test('signed in: the band shows what is waiting and the panel shows the conversa
   }
 })
 
+test('a message with a picture says so until the picture is fetched, on every surface', OPTIONS, async ($, on) => {
+  const withPicture = { ...(STATE.timeline as object), lines: [{ id: 'e9', from: 'fox', text: '', via: 'human', isMine: false, images: [{ id: 'b_1', w: 800, h: 400 }] }] }
+  on('state.get', (_, e) => ({ value: { value: e.key === 'timeline' ? withPicture : e.key === 'compose' ? { isOpen: false, people: [] } : e.key === 'leaving' ? null : e.key === 'pictureTick' ? 0 : STATE[e.key], version: 1 } }))
+  for (const surface of SURFACES) {
+    const pane = await $.ui.mount({ ...PANE, surface })
+    expect(await pane.find({ type: 'Text', text: /\[picture/ })).toBeDefined()
+    expect(await pane.find({ key: 'ask-e9' })).toBeDefined()
+    await pane.unmount()
+  }
+})
+
 test('Leave asks first: one button, then Leave room or Stay', OPTIONS, async ($, on) => {
   let asking: string | null = null
   on('state.get', (_, e) => ({ value: { value: e.key === 'leaving' ? asking : e.key === 'compose' ? { isOpen: false, people: [] } : STATE[e.key], version: 1 } }))
