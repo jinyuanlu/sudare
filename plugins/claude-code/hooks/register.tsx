@@ -838,7 +838,14 @@ export const register: Register = (on, options) => {
               // A picture is drawn where the terminal can draw one; elsewhere it is named, and the web app shows it.
               const line = !l.images ? words : (
                 <Box flexDirection="column">
-                  {words}
+                  <Box gap={2}>
+                    {words}
+                    {l.images.map((i, n) => (
+                      <Button key={`big-${i.id}`} onPress={() => c.open(`${c.base}/c/${shown.conv}/p/${i.id}`)}>
+                        <Text dimColor>{l.images!.length > 1 ? `enlarge ${n + 1}` : 'enlarge'}</Text>
+                      </Button>
+                    ))}
+                  </Box>
                   {l.images.map((i) => {
                     const png = pictures.get(i.id)
                     const { columns, rows } = pictureBox(i.w, i.h, wide)

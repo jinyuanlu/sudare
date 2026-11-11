@@ -170,6 +170,11 @@ const en = {
   'composer.notImage': 'That is not a picture this browser can read.',
   'composer.tooLarge': 'That picture is too large even after shrinking.',
   'msg.picture': 'Picture from {who}',
+  'picture.back': '‹ Back to the room',
+  'picture.full': 'Click the picture for full size',
+  'picture.fit': 'Click the picture to fit the window',
+  'picture.alt': 'The picture',
+  'picture.missing': 'This picture is not available. It may have been removed, or it was sent before you joined.',
 
   'sys.created': '{who} created “{topic}”',
   'sys.renamed': '{who} renamed this to “{topic}”',
@@ -530,6 +535,11 @@ const zh: Record<Key, string> = {
   'composer.notImage': '浏览器读不出这张图片。',
   'composer.tooLarge': '这张图片缩小后仍然太大。',
   'msg.picture': '{who} 发的图片',
+  'picture.back': '‹ 回到房间',
+  'picture.full': '点击图片看原始大小',
+  'picture.fit': '点击图片适应窗口',
+  'picture.alt': '图片',
+  'picture.missing': '这张图片无法显示。它可能已被删除，或者是在你加入之前发的。',
 
   'sys.created': '{who} 创建了“{topic}”',
   'sys.renamed': '{who} 将房间改名为“{topic}”',

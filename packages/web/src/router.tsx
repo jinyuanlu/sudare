@@ -12,6 +12,7 @@ export type Route =
   | { name: 'conv'; id: ConvId }
   | { name: 'notes'; id: ConvId }
   | { name: 'note'; id: ConvId; note: NoteId }
+  | { name: 'picture'; id: ConvId; image: string }
 
 const STATIC: Record<string, Route> = {
   '/': { name: 'home' }, '/login': { name: 'login' }, '/new': { name: 'new' }, '/inbox': { name: 'inbox' },
@@ -30,6 +31,7 @@ export const parseRoute = (pathname: string): Route => {
     if (b === undefined) return { name: 'conv', id: a }
     if (b === 'notes' && c === undefined) return { name: 'notes', id: a }
     if (b === 'notes' && isNoteId(c)) return { name: 'note', id: a, note: c }
+    if (b === 'p' && c && /^b_[0-9a-f]{32}$/.test(c)) return { name: 'picture', id: a, image: c }
   }
   return { name: 'notfound' }
 }

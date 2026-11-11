@@ -1,4 +1,4 @@
-import { useEffect } from 'preact/hooks'
+import { useEffect, useState } from 'preact/hooks'
 import { t } from './i18n'
 import { Link, loginPath, navigate, parseRoute, safeNext, useLocation, type Route } from './router'
 import { useStore } from './store'
@@ -29,6 +29,20 @@ const Screen = ({ route, query }: { route: Route; query: URLSearchParams }) => {
   }
 }
 
+/** One picture, alone and large: what "enlarge" in a terminal opens. Click to switch between fitting the window and full size. */
+const Picture = ({ conv, image }: { conv: string; image: string }) => {
+  const [full, setFull] = useState(false)
+  const [missing, setMissing] = useState(false)
+  return (
+    <main class={`picture${full ? ' full' : ''}`}>
+      <p class="picture-bar"><Link href={`/c/${conv}`}>{t('picture.back')}</Link> <span class="muted small">{missing ? '' : t(full ? 'picture.fit' : 'picture.full')}</span></p>
+      {missing
+        ? <p class="error" role="alert">{t('picture.missing')}</p>
+        : <img src={`/api/convs/${conv}/images/${image}`} alt={t('picture.alt')} data-testid="picture" onClick={() => setFull((f) => !f)} onError={() => setMissing(true)} />}
+    </main>
+  )
+}
+
 export const App = () => {
   const me = useStore((s) => s.me)
   const lang = useStore((s) => s.lang)
@@ -46,6 +60,7 @@ export const App = () => {
     if (me === undefined) return <Solo title="Sudare"><Loading /></Solo>
     if (me === null) return null
     if (route.name === 'link') return <LinkScreen key={route.id} id={route.id} />
+    if (route.name === 'picture') return <Picture key={route.image} conv={route.id} image={route.image} />
     const active = route.name === 'conv' || route.name === 'notes' || route.name === 'note' ? route.id : null
     return (
       <div class="shell" data-route={route.name}>

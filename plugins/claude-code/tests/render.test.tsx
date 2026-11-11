@@ -81,6 +81,7 @@ test('a message with a picture says so until the picture is fetched, on every su
     const pane = await $.ui.mount({ ...PANE, surface })
     expect(await pane.find({ type: 'Text', text: /\[picture/ })).toBeDefined()
     expect(await pane.find({ key: 'ask-e9' })).toBeDefined()
+    expect(await pane.find({ key: 'big-b_1' })).toBeDefined()
     await pane.unmount()
   }
 })
