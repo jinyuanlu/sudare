@@ -7,6 +7,7 @@ import { ApiFailure, api } from '../api'
 import { useAction, useLoad } from '../hooks'
 import { t } from '../i18n'
 import { confirmLink, registerWithInvite, signIn } from '../passkey'
+import { randomName } from '../names'
 import { Link, navigate } from '../router'
 import { refresh } from '../store'
 import { ErrorNote, Field, Loading, QuickStart, Solo, useSite } from '../ui'
@@ -49,7 +50,8 @@ type CardProps = {
 
 /** An invitation as a card with the handle to join under. Used for links and for received invitations. */
 export const InviteCard = ({ topic, by, members, expires, suggested, onJoin, onDecline }: CardProps) => {
-  const [handle, setHandle] = useState(suggested ?? '')
+  // Someone who has never picked a name gets one offered, from an old story or from history.
+  const [handle, setHandle] = useState(() => suggested ?? randomName())
   const act = useAction()
   const join = (e: Event) => {
     e.preventDefault()
@@ -68,6 +70,7 @@ export const InviteCard = ({ topic, by, members, expires, suggested, onJoin, onD
       <Field label={t('join.handle')} hint={t('join.handleHint')}>
         <input data-testid="handle" value={handle} maxLength={24} required autocomplete="nickname" onInput={(e) => setHandle(e.currentTarget.value)} />
       </Field>
+      {suggested ? null : <button type="button" class="link" data-testid="another-name" onClick={() => setHandle(randomName(handle))}>{t('join.another')}</button>}
       <ErrorNote error={act.error} />
       <div class="row">
         <button type="submit" class="primary" data-testid="join" disabled={act.busy}>{t('join.join')}</button>
