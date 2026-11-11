@@ -20,6 +20,7 @@ export type Env = {
   PLUGIN_REMEMBER_HOURS?: string
   IMAGES?: string
   IMAGES_PER_DAY?: string
+  IMAGES_PER_DAY_TOTAL?: string
   OPEN_SIGNUP?: string
   SIGNUP_DAILY_LIMIT?: string
   SITE_NOTICE?: string
@@ -41,6 +42,8 @@ export const rememberHours = (env: Env): number => {
 /** Pictures in messages: on unless the operator says off; each person may upload so many a day, across all rooms. */
 export const imagesOn = (env: Env): boolean => env.IMAGES !== 'off'
 export const imagesPerDay = (env: Env): number => hours(env.IMAGES_PER_DAY, 30)
+/** The whole server's ceiling for a day: past it, uploads stop until tomorrow, whoever asks. */
+export const imagesPerDayTotal = (env: Env): number => hours(env.IMAGES_PER_DAY_TOTAL, 2000)
 
 /** Open sign-up: anyone may create an account without an invitation, up to a daily number. */
 export const openSignup = (env: Env): boolean => env.OPEN_SIGNUP === 'on'

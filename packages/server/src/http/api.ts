@@ -14,7 +14,7 @@ import { TOKEN_PREFIX, revokeGrants } from '../auth/oauth'
 import { addOptions, addVerify, assertOptions, assertVerify, registerOptions, registerVerify } from '../auth/passkey'
 import { adoptSession, clearCookie, endDeviceSessions, endSession, issueSession, readSession, sessionCookie, type Session } from '../auth/session'
 import { deviceView, directory } from '../directory'
-import { imagesOn, imagesPerDay, openSignup, origin, rememberHours, type Env } from '../env'
+import { imagesOn, imagesPerDay, imagesPerDayTotal, openSignup, origin, rememberHours, type Env } from '../env'
 import { fromBase64, sniffImage, toBase64 } from '../image'
 import { pushConfigured } from '../push'
 import { acceptInvite, bootstrap, createConv, declineInvite, inviteByCode, inviteCard, inviteLink, inviteMember, inviteOpenTo, roomLink, signup } from '../services/convs'
@@ -386,6 +386,9 @@ api.post('/convs/:id/images', anyHuman, async (c) => {
   // A preview is a small PNG or it is nothing.
   const small = thumb && thumb.length <= THUMB_BYTES && sniffImage(thumb)?.type === 'image/png' ? thumb : null
   const day = Math.floor(Date.now() / 86_400_000)
+  // The server-wide brake first: a day's uploads have a ceiling, whoever is asking.
+  const today = await c.env.DB.prepare(`SELECT coalesce(sum(n), 0) AS n FROM uploads WHERE day = ?`).bind(day).first<{ n: number }>()
+  if ((today?.n ?? 0) >= imagesPerDayTotal(c.env)) return fail('rate_limited')
   const counted = await c.env.DB.prepare(
     `INSERT INTO uploads (principal, day, n, bytes) VALUES (?, ?, 1, ?)
      ON CONFLICT(principal, day) DO UPDATE SET n = n + 1, bytes = bytes + excluded.bytes WHERE n < ? RETURNING n`,
@@ -688,6 +691,21 @@ admin.post('/wipe', async (c) => {
   const keys = await c.env.OAUTH_KV.list({ limit: 30 })
   await Promise.all(keys.keys.map((k) => c.env.OAUTH_KV.delete(k.name)))
   return c.json({ left: keys.list_complete ? 0 : 'grants' })
+})
+
+/** What the operator watches: how much was uploaded and how many accounts were made today, against the limits. */
+admin.get('/usage', async (c) => {
+  const day = Math.floor(Date.now() / 86_400_000)
+  const [up, people, rooms, made] = await Promise.all([
+    c.env.DB.prepare(`SELECT coalesce(sum(n), 0) AS n, coalesce(sum(bytes), 0) AS bytes, count(*) AS uploaders FROM uploads WHERE day = ?`).bind(day).first<{ n: number; bytes: number; uploaders: number }>(),
+    c.env.DB.prepare(`SELECT count(*) AS n FROM principals`).first<{ n: number }>(),
+    c.env.DB.prepare(`SELECT count(*) AS n FROM convs`).first<{ n: number }>(),
+    c.env.DB.prepare(`SELECT count(*) AS n FROM principals WHERE created_at > ?`).bind(Date.now() - 86_400_000).first<{ n: number }>(),
+  ])
+  return c.json({
+    pictures_today: { count: up?.n ?? 0, bytes: up?.bytes ?? 0, people: up?.uploaders ?? 0, limit: imagesPerDayTotal(c.env), per_person_limit: imagesPerDay(c.env) },
+    accounts: { total: people?.n ?? 0, last_24h: made?.n ?? 0 }, rooms: rooms?.n ?? 0,
+  })
 })
 
 /** Migration exit: the complete logs as NDJSON, in seq order. */

@@ -403,12 +403,21 @@ describe('pictures in messages', () => {
     expect((await ann.post(`/convs/${conv}/messages`, { id: newEventId(), text: 'x', images: five })).status).toBe(400)
 
     const e = env as any
-    const before = { IMAGES: e.IMAGES, IMAGES_PER_DAY: e.IMAGES_PER_DAY }
+    const before = { IMAGES: e.IMAGES, IMAGES_PER_DAY: e.IMAGES_PER_DAY, IMAGES_PER_DAY_TOTAL: e.IMAGES_PER_DAY_TOTAL }
     try {
       const { who: dan, conv: room } = await founder('dan')
       e.IMAGES_PER_DAY = '1'
       expect((await dan.post(`/convs/${room}/images`, { data: PNG })).status).toBe(201)
       expect((await dan.post(`/convs/${room}/images`, { data: PNG })).status).toBe(429)
+      // The whole server has a ceiling too, and the operator can see where it stands.
+      const usage = await raw('/admin/usage', { headers: { Authorization: `Bearer ${ADMIN}` } }).then((r) => r.json<any>())
+      expect(usage.pictures_today.count).toBeGreaterThan(0)
+      expect((await raw('/admin/usage')).status).toBe(401)
+      const { who: fay, conv: other } = await founder('fay')
+      e.IMAGES_PER_DAY_TOTAL = String(usage.pictures_today.count)
+      expect((await fay.post(`/convs/${other}/images`, { data: PNG })).status).toBe(429)
+      e.IMAGES_PER_DAY_TOTAL = String(usage.pictures_today.count + 1)
+      expect((await fay.post(`/convs/${other}/images`, { data: PNG })).status).toBe(201)
       e.IMAGES = 'off'
       expect((await dan.post(`/convs/${room}/images`, { data: PNG })).status).toBe(404)
       expect(await raw('/api/site').then((r) => r.json<any>())).toMatchObject({ images: false })

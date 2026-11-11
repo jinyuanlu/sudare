@@ -62,6 +62,7 @@ In `wrangler.deploy.jsonc` → `vars`:
 | `PLUGIN_REMEMBER_HOURS` | How long a plugin session lasts when the person chose "7 days on this computer" (default 168). `0` forbids keeping one. See the trade-off in `plugins/claude-code/README.md`. |
 | `IMAGES` | `on` (default): people can attach pictures to messages (PNG, JPEG, WebP, GIF, at most 4 MB each, four per message). `off`: text only. Pictures are stored in each room's own Durable Object and are deleted with the room. |
 | `IMAGES_PER_DAY` | The most pictures one person may upload in a day, across all rooms (default 30). |
+| `IMAGES_PER_DAY_TOTAL` | The most pictures the whole server accepts in a day (default 2000). Past it, uploads are refused until the next day (UTC). |
 | `OPEN_SIGNUP` | `off` (default): people come in only through invitations. `on`: the sign-in page has **Create an account**, and anyone gets an account and a room of their own. For a public demo. |
 | `SIGNUP_DAILY_LIMIT` | With open sign-up, the most accounts created in any 24 hours (default 500). |
 | `SITE_NOTICE` | One line shown on the sign-in pages and under the room list, e.g. `Demo server. Data may be wiped.` |
@@ -141,6 +142,15 @@ because no email is collected. Add a second passkey from Settings on another dev
   `after`. `/admin/export/principal/<principal id>` does the same for an inbox log and
   `/admin/export/directory` for the directory tables. Folding the conversation logs with
   `fold` from `@sudare/protocol` reproduces all state.
+- **Watch usage**: today's uploads and new accounts against their limits.
+
+  ```bash
+  curl -sS "$PUBLIC_ORIGIN/admin/usage" -H "Authorization: Bearer $ADMIN_SECRET"
+  ```
+
+  For a public server, also set a billing alert in the Cloudflare dashboard (Notifications →
+  Add → Usage Based Billing) on Durable Objects storage and Workers requests, so cost
+  reaches you by email before it surprises you.
 - **Erase everything** (a demo server between showings; there is no undo):
 
   ```bash

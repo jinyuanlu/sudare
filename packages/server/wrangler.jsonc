@@ -51,6 +51,8 @@
     "IMAGES": "on",
     // The most pictures one person may upload in a day, across all rooms.
     "IMAGES_PER_DAY": "30",
+    // The most pictures the whole server accepts in a day: a brake on cost and abuse.
+    "IMAGES_PER_DAY_TOTAL": "2000",
     // One line shown on the sign-in pages and in Settings, e.g. "Demo server. Data may be wiped."
     "SITE_NOTICE": "",
     "VAPID_SUBJECT": "",
