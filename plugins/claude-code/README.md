@@ -72,6 +72,7 @@ instead. `claude --debug` says `hooks module sudare… loaded` when it is on.
 | **To** row in the panel | `everyone`, or one person. `●` means they are here now. A message for one person is still readable by the others; it also lands in that person's inbox. |
 | `/sudare` | Lists your rooms. `/sudare <topic prefix>` picks one and prints its recent messages. |
 | `@fox see you at 3` + Enter | Sends to `@fox` in the current room. |
+| Paste a picture into the panel's message box (`Ctrl+V`, or drag the file in), Enter | The box shows the file's path; the picture is what gets sent, with any words you add. |
 | Paste a picture into the prompt, type `@everyone` or `@fox` (and words if you like), Enter | Sends the picture to the room on screen. Pictures in a room are drawn in the panel in kitty, Ghostty and iTerm2; other terminals show `[picture]` and **Web** opens it. |
 | **Reply** | Puts `@name ` in your prompt; type and press Enter to send as yourself. |
 | **Ask Claude** | Hands the message to your agent, which drafts a reply. Until that turn ends the agent can only read, search and draft. |

@@ -11,6 +11,7 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { SudareConv, SudareDraft, SudareInvite, SudareItem, SudareLine, SudareLink, SudarePerson, SudareSeat, SudareSnapshot, SudareTimeline } from '../types'
 import { isSignedIn, keepsSignIn, makeClient, type Client, type Json } from './client'
+import { picturePaths } from './paths'
 import { enterReadonly, isOwnCall, isPluginOnlyTool, leaveReadonly, refusal } from './guard'
 
 type Engine = EngineInterface
@@ -318,9 +319,27 @@ async function openConv($: Engine, c: Client, conv: string): Promise<void> {
 }
 
 /** "@a @b rest" names people; anything else is a message to the whole conversation. */
+/** Read the picture files a person named in the message box and put them in the room, ready to send. */
+async function uploadFiles($: Engine, c: Client, conv: string, paths: string[]): Promise<{ images: string[]; problem: string | null }> {
+  const images: string[] = []
+  const home = paths.some((p) => p.startsWith('~/')) ? ((await $.env.get('HOME').catch(() => undefined)) ?? '') : ''
+  for (const path of paths) {
+    const file = await $.fs.read(path.startsWith('~/') ? `${home}${path.slice(1)}` : path, { as: 'bytes' }).catch(() => null)
+    if (!file) return { images, problem: `Not sent: could not read ${clip(path, 60)} (missing, or over 4 MB).` }
+    const r = await c.api('POST', `/convs/${conv}/images`, { data: file.base64 })
+    if (!r.ok) return { images, problem: `Not sent: ${str((r.body as Json).error) === 'bad_request' ? `${clip(path, 60)} is not a picture` : why(r)}` }
+    images.push(str(((r.body as Json).image as Json).id))
+  }
+  return { images, problem: null }
+}
+
 async function sayHere($: Engine, c: Client, conv: string, text: string, picked: string | null): Promise<void> {
-  const body = text.trim()
-  if (body === '') return
+  // A picture pasted into this box arrives as a file's path: send the picture, not its name.
+  const found = picturePaths(text.trim())
+  const body = found.rest
+  if (body === '' && found.paths.length === 0) return
+  const up = await uploadFiles($, c, conv, found.paths)
+  if (up.problem) return void (await say($, up.problem))
   // A typed @name counts even when it is lower-case or only the start of a name, as long as it is unambiguous.
   const names = ((await read($, timeline))?.others ?? []).map((o) => o.handle)
   const resolve = (typed: string): string => {
@@ -330,8 +349,8 @@ async function sayHere($: Engine, c: Client, conv: string, text: string, picked:
     return exact ?? (starts.length === 1 ? starts[0]! : typed)
   }
   const to = [...new Set([...(picked ? [picked] : []), ...[...body.matchAll(/(^|\s)@([^\s@]{1,24})/g)].map((m) => resolve(m[2]!))])]
-  const r = await c.api('POST', `/convs/${conv}/messages`, { id: newId(), text: body, to_handles: to })
-  if (!r.ok && str((r.body as Json).error) === 'recipient_unknown') await c.api('POST', `/convs/${conv}/messages`, { id: newId(), text: body })
+  const r = await c.api('POST', `/convs/${conv}/messages`, { id: newId(), text: body, to_handles: to, images: up.images })
+  if (!r.ok && str((r.body as Json).error) === 'recipient_unknown') await c.api('POST', `/convs/${conv}/messages`, { id: newId(), text: body, images: up.images })
   else if (!r.ok) await say($, `Not sent: ${why(r)}`)
   if (r.ok) await update($, target, () => null) // the choice is for one message, not a mode
   await refresh($, c)
@@ -771,7 +790,7 @@ export const register: Register = (on, options) => {
         {shown && !shown.isArchived && (
           <Box borderStyle="round" borderColor="suggestion" paddingX={1} flexDirection="column">
             <Input key={`say-${shown.conv}`} label="Message" submitLabel="Send"
-              placeholder={picked ? `Type here, for ${picked.handle} (all can read)` : shown.others.length > 1 ? 'Type here, to everyone' : shown.others.length === 1 ? `Type here, to ${shown.others[0]!.handle}` : 'Type here'}
+              placeholder={picked ? `Type here, for ${picked.handle} (all can read)` : shown.others.length > 1 ? 'Type here, to everyone. Ctrl+V pastes a picture' : shown.others.length === 1 ? `Type here, to ${shown.others[0]!.handle}. Ctrl+V pastes a picture` : 'Type here'}
               onSubmit={(text) => void sayHere($, c, shown.conv, text, picked?.handle ?? null)} />
           </Box>
         )}
