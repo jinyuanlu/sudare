@@ -4,6 +4,7 @@ import { normalizeHandle } from '@sudare/protocol'
 import { ApiFailure, api, type InviteLink } from '../api'
 import { useAction, useLoad } from '../hooks'
 import { t } from '../i18n'
+import { randomName } from '../names'
 import { navigate } from '../router'
 import { refresh } from '../store'
 import { CopyButton, ErrorNote, Loading, Modal } from '../ui'
@@ -98,6 +99,7 @@ const RenameMe = ({ view, current, onChanged }: { view: ConvView; current: strin
         <button type="submit" class="primary" data-testid="rename-save" disabled={act.busy}>{t('members.renameSave')}</button>
         <button type="button" disabled={act.busy} onClick={() => setOpen(false)}>{t('common.cancel')}</button>
       </div>
+      <button type="button" class="link" data-testid="rename-suggest" onClick={() => setHandle(randomName(handle))}>{t('join.another')}</button>
       <p class="muted small">{t('members.renameHint')}</p>
       <ErrorNote error={act.error} />
     </form>
