@@ -333,6 +333,46 @@ async function uploadFiles($: Engine, c: Client, conv: string, paths: string[]):
   return { images, problem: null }
 }
 
+/**
+ * The picture on the system clipboard, written to a file by the operating system's own
+ * tool: a terminal has no way to hand a pasted picture to a text field. Returns the file,
+ * or why there is none.
+ */
+async function clipboardPicture($: Engine): Promise<{ path: string } | { problem: string }> {
+  const os = await $.process.run(['uname', '-s'], { timeoutMs: 5000 }).then((r) => r.stdout.trim(), () => '')
+  const dir = ((await $.env.get('TMPDIR').catch(() => undefined)) ?? '/tmp').replace(/\/+$/, '')
+  const path = `${dir}/sudare-clipboard-${newId()}.png`
+  if (os === 'Darwin') {
+    // A copied screenshot is PNG data; a file copied in Finder is a reference to the file.
+    const asPng = await $.process.run(['osascript',
+      '-e', 'set png to (the clipboard as «class PNGf»)',
+      '-e', `set f to open for access POSIX file "${path}" with write permission`,
+      '-e', 'set eof f to 0', '-e', 'write png to f', '-e', 'close access f'], { timeoutMs: 15000 }).catch(() => null)
+    if (asPng?.exitCode === 0) return { path }
+    const asFile = await $.process.run(['osascript', '-e', 'POSIX path of (the clipboard as «class furl»)'], { timeoutMs: 15000 }).catch(() => null)
+    const file = asFile?.exitCode === 0 ? asFile.stdout.trim() : ''
+    return /\.(png|jpe?g|gif|webp)$/i.test(file) ? { path: file } : { problem: 'There is no picture on the clipboard. Take a screenshot to the clipboard first (Cmd+Ctrl+Shift+4).' }
+  }
+  if (os === 'Linux') {
+    const got = await $.process.run(['sh', '-c', '(wl-paste --type image/png > "$1" 2>/dev/null || xclip -selection clipboard -t image/png -o > "$1" 2>/dev/null) && test -s "$1"', 'sh', path], { timeoutMs: 15000 }).catch(() => null)
+    return got?.exitCode === 0 ? { path } : { problem: 'There is no picture on the clipboard (this needs wl-paste or xclip).' }
+  }
+  return { problem: 'Pasting a picture from the clipboard is not supported on this system yet. Drag the picture file into the message box instead.' }
+}
+
+/** Paste picture: whatever picture is on the clipboard goes to the room on screen, to one person or to everyone. */
+async function pastePicture($: Engine, c: Client, conv: string, picked: string | null): Promise<void> {
+  const clip = await clipboardPicture($)
+  if ('problem' in clip) return void (await say($, clip.problem))
+  const up = await uploadFiles($, c, conv, [clip.path])
+  if (clip.path.includes('/sudare-clipboard-')) await $.process.run(['rm', '-f', clip.path], { timeoutMs: 5000 }).catch(() => undefined)
+  if (up.problem) return void (await say($, up.problem))
+  const r = await c.api('POST', `/convs/${conv}/messages`, { id: newId(), text: '', images: up.images, ...(picked ? { to_handles: [picked] } : {}) })
+  if (r.ok) $.ui.toast('Sent the picture.')
+  else await say($, `Not sent: ${why(r)}`)
+  await refresh($, c)
+}
+
 async function sayHere($: Engine, c: Client, conv: string, text: string, picked: string | null): Promise<void> {
   // A picture pasted into this box arrives as a file's path: send the picture, not its name.
   const found = picturePaths(text.trim())
@@ -790,7 +830,7 @@ export const register: Register = (on, options) => {
         {shown && !shown.isArchived && (
           <Box borderStyle="round" borderColor="suggestion" paddingX={1} flexDirection="column">
             <Input key={`say-${shown.conv}`} label="Message" submitLabel="Send"
-              placeholder={picked ? `Type here, for ${picked.handle} (all can read)` : shown.others.length > 1 ? 'Type here, to everyone. Ctrl+V pastes a picture' : shown.others.length === 1 ? `Type here, to ${shown.others[0]!.handle}. Ctrl+V pastes a picture` : 'Type here'}
+              placeholder={picked ? `Type here, for ${picked.handle} (all can read)` : shown.others.length > 1 ? 'Type here, to everyone' : shown.others.length === 1 ? `Type here, to ${shown.others[0]!.handle}` : 'Type here'}
               onSubmit={(text) => void sayHere($, c, shown.conv, text, picked?.handle ?? null)} />
           </Box>
         )}
@@ -848,6 +888,7 @@ export const register: Register = (on, options) => {
           </Box>
         )}
         <Box gap={2} flexWrap="wrap">
+          {shown && !shown.isArchived && <Button key="paste-picture" label="Paste picture" onPress={() => pastePicture($, c, shown.conv, picked?.handle ?? null)} />}
           {shown && shown.canInvite && <Button key="invite" label="Invite" onPress={() => inviteLink($, c, shown.conv, e.surface)} />}
           {shown && !form.isOpen && <Button key="new" label="New room" onPress={() => update($, compose, () => ({ isOpen: true, people: shown.others.map((o) => o.handle) }))} />}
           {shown && !isLeaving && <Button key="leave" label="Leave" onPress={() => update($, leaving, () => shown.conv)} />}
