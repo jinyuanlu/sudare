@@ -121,10 +121,12 @@ const systemText = (e: ConvEvent, name: Names): string | null => {
   }
 }
 
-type RowProps = { e: ConvEvent; me: AliasId; name: Names; quote: string | null; receipt: ReceiptState | null; focused: boolean; onReply: (() => void) | null }
+type RowProps = { e: ConvEvent; me: AliasId; name: Names; quote: string | null; receipt: ReceiptState | null; focused: boolean; onReply: (() => void) | null; onAsk: (() => Promise<unknown>) | null }
 
-const MessageRow = ({ e, me, name, quote, receipt, focused, onReply }: RowProps) => {
+const MessageRow = ({ e, me, name, quote, receipt, focused, onReply, onAsk }: RowProps) => {
+  const [asked, setAsked] = useState<'no' | 'yes' | 'failed'>('no')
   if (e.body.kind !== 'message') return null
+  const ask = () => void onAsk?.().then(() => setAsked('yes'), () => setAsked('failed'))
   const { author, text, to, cause } = e.body
   const via = author.kind === 'human' ? null : t(author.kind === 'delegate' ? 'msg.delegate' : 'msg.autonomous')
   return (
@@ -140,6 +142,7 @@ const MessageRow = ({ e, me, name, quote, receipt, focused, onReply }: RowProps)
         {to.length > 0 ? <span>{t('msg.to', { who: to.map((a) => `@${name(a)}`).join(' ') })}</span> : null}
         {receipt ? <span class="receipt">{t(`receipt.${receipt}`)}</span> : null}
         {onReply ? <button type="button" class="link" onClick={onReply}>{t('msg.replyAction')}</button> : null}
+        {onAsk && author.alias !== me ? (asked === 'yes' ? <span>{t('msg.asked')}</span> : <button type="button" class="link" data-testid="ask-agent" onClick={ask}>{t(asked === 'failed' ? 'msg.askFailed' : 'msg.askAction')}</button>) : null}
       </div>
     </li>
   )
@@ -205,6 +208,7 @@ export const Timeline = ({ view, tl, name, focus, onReply, onBottom }: TimelineP
               <MessageRow
                 key={e.id} e={e} me={view.me} name={name} quote={quote} receipt={e.body.kind === 'message' && e.body.author.alias === view.me ? (receipts.get(e.id) ?? null) : null /* what the other person did with MY message; my own state is not a receipt */}
                 focused={e.seq === focus} onReply={onReply ? () => onReply(e) : null}
+                onAsk={onReply ? () => api.messageHandoff(view.id, e.id, 'readonly') : null}
               />
             )
           }

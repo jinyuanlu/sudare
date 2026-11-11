@@ -117,6 +117,7 @@ export const api = {
 
   inbox: () => get<InboxItem[]>('/inbox'),
   inboxRead: (msg: EventId) => post<{ state: InboxItem['state'] }>(`/inbox/${msg}/read`),
+  messageHandoff: (conv: ConvId, msg: EventId, mode: HandoffMode) => post<{ state: InboxItem['state'] }>(`/convs/${conv}/messages/${msg}/handoff`, { mode }),
   inboxHandoff: (msg: EventId, mode: HandoffMode) => post<{ state: InboxItem['state'] }>(`/inbox/${msg}/handoff`, { mode }),
   inboxDone: (msg: EventId) => post<{ state: InboxItem['state'] }>(`/inbox/${msg}/done`),
   inboxTakeBack: (msg: EventId) => post<{ state: InboxItem['state'] }>(`/inbox/${msg}/takeback`),

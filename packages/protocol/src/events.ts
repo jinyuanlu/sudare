@@ -79,6 +79,7 @@ export type InboxBody =
   | { kind: 'conv_left'; conv: ConvId }
   | { kind: 'delivered'; msg: EventId; conv: ConvId; addressed: boolean }
   | { kind: 'notice'; conv: ConvId; seq: number; event: ConvKind }
+  | { kind: 'picked'; msg: EventId; conv: ConvId } // a message that was not addressed to this person, which they chose to deal with
   | { kind: 'read'; msg: EventId }
   | { kind: 'handed_off'; msg: EventId; mode: HandoffMode }
   | { kind: 'claimed'; msg: EventId; device: DeviceId }

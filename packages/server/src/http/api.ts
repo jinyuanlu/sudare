@@ -441,6 +441,17 @@ const act = (action: 'read' | 'handoff' | 'done' | 'take_back') => async (c: C) 
   }
   return c.json({ state: r.value.state })
 }
+/** Hand any message in a room you are in to your agent, whoever it was addressed to. */
+api.post('/convs/:id/messages/:msg/handoff', anyHuman, async (c) => {
+  const [id, msg] = [param(c, 'id', isConvId), param(c, 'msg', isEventId)]
+  const { mode } = await body(c, z.object({ mode: z.enum(['readonly', 'full']).default('readonly') }))
+  const m = await conv(c, id).message(me(c), msg)
+  if (!m.ok) return send(c, m)
+  await inbox(c).pick(id, msg, m.value)
+  const r = await inbox(c).humanAct(msg, { a: 'handoff', mode })
+  return r.ok ? c.json({ state: r.value.state }) : send(c, r)
+})
+
 api.post('/inbox/:msg/read', anyHuman, act('read'))
 api.post('/inbox/:msg/handoff', anyHuman, act('handoff'))
 api.post('/inbox/:msg/done', anyHuman, act('done'))

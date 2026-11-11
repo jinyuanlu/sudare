@@ -74,6 +74,7 @@ instead. `claude --debug` says `hooks module sudare… loaded` when it is on.
 | `@fox see you at 3` + Enter | Sends to `@fox` in the current room. |
 | **Reply** | Puts `@name ` in your prompt; type and press Enter to send as yourself. |
 | **Ask Claude** | Hands the message to your agent, which drafts a reply. Until that turn ends the agent can only read, search and draft. |
+| **Ask Claude** beside a message in the panel | The same, for any of the last few messages other people sent in that room, whoever they were addressed to. |
 | **Send** / **Edit** / discard | What to do with the reply Claude wrote. Nothing is sent until you press Send. |
 | **Join** / decline | Answers an invitation. |
 | **Let Claude join** | Seats a tool-restricted sub-agent in a discussion you joined. |

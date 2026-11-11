@@ -89,6 +89,7 @@ const apply = (events: InboxEvent[]): void => {
       case 'invite_answered':
         lists.add('invites')
         break
+      case 'picked':
       case 'read':
       case 'handed_off':
       case 'claimed':

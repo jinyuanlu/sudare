@@ -372,6 +372,16 @@ export class ConversationDO extends DurableObject<Env> {
     return ok({ events: (forward ? page : page.reverse()).map(publicEvent), more: rows.length > limit })
   }
 
+  /** One message someone else wrote, as this member may see it (I12): what a person needs to hand it to their agent. */
+  async message(p: PrincipalId, id: EventId): Promise<Result<{ seq: number; ts: number; sender: string; text: string }>> {
+    const m = this.member(p)
+    if (!m.ok) return m
+    const e = this.rows(`id = ?`, id)[0]
+    if (!e || e.body.kind !== 'message' || e.seq < m.value.fromSeq || m.value.leftSeq !== null) return err('not_found')
+    if (e.body.author.alias === m.value.alias) return err('bad_request', 'own message')
+    return ok({ seq: e.seq, ts: e.ts, sender: this.state.members[e.body.author.alias]?.handle ?? '', text: e.body.text })
+  }
+
   /** Alias ids for handles, for agent drafts. Unknown handles are an error naming them. */
   async resolveHandles(p: PrincipalId, handles: string[]): Promise<Result<AliasId[]>> {
     const m = this.member(p)

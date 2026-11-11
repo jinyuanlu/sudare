@@ -307,3 +307,35 @@ describe('changing your name in a room', () => {
     expect((await ann.get(`/convs/${conv}`)).body.members.map((m: any) => m.handle).sort()).toEqual(['Caliban', 'Prospero'])
   })
 })
+
+describe('handing any message to your agent', () => {
+  it('works for a message that was addressed to nobody, and only within what the member may read', async () => {
+    const { who: ann, conv } = await founder()
+    const early = await ann.send(conv, 'said before bob and cat arrived')
+    const bob = await invite(ann, conv, 'bob')
+    const cat = await invite(ann, conv, 'cat')
+    const said = await ann.send(conv, 'what TTL should the cache use?') // three people: addressed to no one
+    const agent = await agentFor(bob)
+    expect((await bob.get('/inbox')).body).toEqual([])
+    expect((await agent.tool('inbox')).data.messages).toEqual([])
+
+    expect((await bob.post(`/convs/${conv}/messages/${said}/handoff`)).body).toEqual({ state: 'handed_off' })
+    const waiting = await eventually(async () => { const m = (await agent.tool('inbox')).data.messages; return m.length === 1 ? m : null }, 'agent inbox')
+    expect(waiting[0]).toMatchObject({ msg: said })
+    const claimed = await agent.tool('claim', { msg: said })
+    expect(claimed.data.message.untrusted_text).toBe('what TTL should the cache use?')
+    expect((await agent.tool('history', { conv })).ok).toBe(true)
+    // cat did not hand anything over: her agent sees nothing and cannot read the room.
+    const cats = await agentFor(cat)
+    expect((await cats.tool('inbox')).data.messages).toEqual([])
+    expect((await cats.tool('history', { conv })).ok).toBe(false)
+
+    // Not what was said before you joined (I12), not your own message, not from outside the room.
+    expect((await bob.post(`/convs/${conv}/messages/${early}/handoff`)).status).toBe(404)
+    expect((await ann.post(`/convs/${conv}/messages/${said}/handoff`)).status).toBe(400)
+    const { who: eve } = await founder('eve')
+    expect((await eve.post(`/convs/${conv}/messages/${said}/handoff`)).status).toBeGreaterThanOrEqual(403)
+    // An agent cannot do this for itself.
+    expect((await raw(`/api/convs/${conv}/messages/${said}/handoff`, { method: 'POST', headers: { Authorization: `Bearer ${agent.token}`, Origin: ORIGIN, 'Content-Type': 'application/json' }, body: '{}' })).status).toBe(401)
+  })
+})

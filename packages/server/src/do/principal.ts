@@ -320,6 +320,25 @@ export class PrincipalDO extends DurableObject<Env> {
     return rows.map((r) => this.toInboxItem(r, r.topic))
   }
 
+  /**
+   * A person may deal with any message they can read, not only the ones addressed to
+   * them: this puts one into what is waiting for them, so it can be handed to an agent.
+   * The message itself comes from the room, which has already checked they may see it.
+   */
+  async pick(conv: ConvId, msg: EventId, m: { seq: number; ts: number; sender: string; text: string }): Promise<void> {
+    this.ctx.storage.transactionSync(() => {
+      const had = this.item(msg)
+      if (had && had.parsed.s !== 'done') return
+      const state: ItemState = { s: 'read' }
+      this.sql.exec(
+        `INSERT INTO items (msg, conv, cseq, ts, sender, text, state, s) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(msg) DO UPDATE SET state = excluded.state, s = excluded.s, device = NULL, beat = NULL`,
+        msg, conv, m.seq, m.ts, m.sender, m.text, JSON.stringify(state), state.s,
+      )
+      this.append({ kind: 'picked', msg, conv }, { conv, msg, cseq: m.seq })
+    })
+  }
+
   /** A human action on an addressed message. Returns what a two-person receipt needs. */
   async humanAct(
     msg: EventId, action: Extract<ItemAction, { a: 'read' | 'handoff' | 'done' | 'take_back' }>,
