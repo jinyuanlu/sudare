@@ -37,6 +37,17 @@ const pictures = new Map<string, string | null>()
 const pictureTick = atom({ plugin: 'sudare', key: 'pictureTick' } as const, 0)
 const PICTURES_KEPT = 24
 
+// The message box is one line and cuts a long text short with "…": a terminal text field does not
+// wrap. So what does not fit is shown whole, wrapped, right under the box while it is being typed.
+const overflow = atom({ plugin: 'sudare', key: 'overflow' } as const, '')
+/** Terminal columns a text takes: wide characters (Chinese, Japanese, Korean, emoji) take two. */
+const columnsOf = (text: string): number => [...text].reduce((n, ch) => n + (/[\u1100-\u115f\u2e80-\ua4cf\uac00-\ud7a3\uf900-\ufaff\ufe30-\ufe4f\uff00-\uff60\uffe0-\uffe6]|\p{Extended_Pictographic}/u.test(ch) ? 2 : 1), 0)
+
+async function showWhole($: Engine, text: string, width: number): Promise<void> {
+  const whole = columnsOf(text) > width || text.includes('\n') ? text : ''
+  if ((await read($, overflow)) !== whole) await update($, overflow, () => whole)
+}
+
 // What the plugin is in the middle of doing for the person, said in the panel while it lasts.
 const working = atom({ plugin: 'sudare', key: 'working' } as const, null as string | null)
 
@@ -754,6 +765,7 @@ export const register: Register = (on, options) => {
     const [form, isHelp, asked] = [await read($, compose), await read($, helpOpen), await read($, leaving)]
     const isLeaving = shown !== null && asked === shown.conv
     const busy = await read($, working)
+    const whole = String((await read($, overflow)) ?? '')
     const picked = shown?.others.find((o) => o.handle === to) ?? null
     const askable = shown && !shown.isArchived ? shown.lines.filter((l) => !l.isMine && l.via !== 'note').slice(-3).map((l) => l.id) : []
     if (isIn && shown && (snap.convs.find((x) => x.id === shown.conv)?.unread ?? 0) > 0) void markSeen($, c).catch(() => undefined)
@@ -795,7 +807,7 @@ export const register: Register = (on, options) => {
             </Text>
             {shown.others.length === 0 && <Text>Only you here. Press Invite.</Text>}
             {shown.others.length > 0 && shown.lines.length === 0 && <Text dimColor>No messages yet.</Text>}
-            {shown.lines.slice(-room).map((l) => {
+            {shown.lines.slice(-Math.max(3, room - (whole === '' ? 0 : Math.ceil(columnsOf(whole) / Math.max(10, wide)) + 1))).map((l) => {
               const words = (
                 <Text>
                   <Text bold={!l.isMine} dimColor={l.isMine}>{l.isMine ? 'you' : l.from}</Text>
@@ -837,8 +849,10 @@ export const register: Register = (on, options) => {
         {shown && !shown.isArchived && (
           <Box borderStyle="round" borderColor="suggestion" paddingX={1} flexDirection="column">
             <Input key={`say-${shown.conv}`} label="Message" submitLabel="Send"
+              onInput={(text) => void showWhole($, text, wide - 20).catch(() => undefined)}
               placeholder={picked ? `Type here. Everyone in the room reads it; ${picked.handle} is notified` : shown.others.length > 1 ? 'Type here, to everyone' : shown.others.length === 1 ? `Type here, to ${shown.others[0]!.handle}` : 'Type here'}
-              onSubmit={(text) => void sayHere($, c, shown.conv, text, picked?.handle ?? null)} />
+              onSubmit={(text) => void (update($, overflow, () => '').catch(() => undefined), sayHere($, c, shown.conv, text, picked?.handle ?? null))} />
+            {whole !== '' && <Text><Text dimColor>You are writing: </Text>{whole}</Text>}
           </Box>
         )}
         {others.length > 0 && (
