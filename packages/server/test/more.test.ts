@@ -302,6 +302,15 @@ describe('changing your name in a room', () => {
     expect((await ann.patch('/me', { default_handle: 'Ariel' })).body).toEqual({ default_handle: 'Ariel' })
     expect((await ann.get('/me')).body.default_handle).toBe('Ariel')
     expect((await ann.get(`/convs/${conv}`)).body.members.find((m: any) => m.me).handle).toBe('Prospero')
+    // A room made from this one uses the usual name, not the name held here; the people brought along keep theirs.
+    const made = await ann.post('/convs', { topic: 'next', parent: conv, members: [{ conv, alias: (await ann.get(`/convs/${conv}`)).body.members.find((m: any) => m.handle === 'bob').alias }] })
+    expect(made.status).toBe(201)
+    expect((await ann.get(`/convs/${made.body.conv}`)).body.members.map((m: any) => m.handle).sort()).toEqual(['Ariel', 'bob'])
+    // Unless someone coming along already goes by it: then the name held here is kept.
+    await ann.patch('/me', { default_handle: 'BOB' })
+    const clash = await ann.post('/convs', { topic: 'clash', parent: conv, members: [{ conv, alias: (await ann.get(`/convs/${conv}`)).body.members.find((m: any) => m.handle === 'bob').alias }] })
+    expect((await ann.get(`/convs/${clash.body.conv}`)).body.members.map((m: any) => m.handle).sort()).toEqual(['Prospero', 'bob'])
+    await ann.patch('/me', { default_handle: 'Ariel' })
     // bob cannot rename ann: the route only ever renames the caller.
     await bob.patch(`/convs/${conv}`, { handle: 'Caliban' })
     expect((await ann.get(`/convs/${conv}`)).body.members.map((m: any) => m.handle).sort()).toEqual(['Caliban', 'Prospero'])

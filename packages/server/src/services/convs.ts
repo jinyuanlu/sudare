@@ -3,7 +3,7 @@
 // idempotent so a retry after a partial failure converges.
 
 import {
-  LIMITS, newAliasId, newConvId, newEventId, newInviteId, normalizeHandle, err, ok,
+  LIMITS, handleKey, newAliasId, newConvId, newEventId, newInviteId, normalizeHandle, err, ok,
   type AliasRef, type ConvId, type EventId, type InviteId, type InvitePolicy, type PrincipalId, type Result, type WritePath,
 } from '@sudare/protocol'
 import { directory, type InviteRow } from '../directory'
@@ -66,7 +66,13 @@ export const createConv = async (env: Env, me: PrincipalId, input: CreateInput):
   const direct = fork?.ok === true
 
   const self = await dir.principal(me)
-  const myHandle = direct ? fork.value[0]! : (input.handle ?? self?.default_handle ?? null)
+  // The people brought along keep the names they have in the room they come from: that is how
+  // the others know them, and their usual names are not ours to reveal. The person creating the
+  // room uses the name they asked for, or their usual one; the name they have in the room they
+  // come from only if they have no other, or if someone coming along already goes by it.
+  const wanted = input.handle ?? self?.default_handle ?? null
+  const isTaken = direct && wanted !== null && fork.value.slice(1).some((h) => handleKey(h) === handleKey(wanted))
+  const myHandle = wanted !== null && !isTaken ? wanted : direct ? fork.value[0]! : null
   if (!myHandle) return err('handle_invalid')
 
   let conv = newConvId()
