@@ -69,7 +69,7 @@ test('signed in: the band shows what is waiting and the panel shows the conversa
     expect(await pane.find({ key: 'ask-e1' })).toBeDefined()
     expect(await pane.find({ key: 'paste-picture' })).toBeDefined()
     expect(await pane.find({ key: 'ask-e2' })).toBeUndefined()
-    for (const key of ['invite', 'web', 'signout', 'close', 'help', 'help-close', 'to-all', 'to-fox', 'to-owl', 'private', 'with-fox', 'with-owl', 'new-cancel']) expect(await pane.find({ key })).toBeDefined()
+    for (const key of ['invite', 'web', 'signout', 'close', 'help', 'help-close', 'to-all', 'to-fox', 'to-owl', 'with-fox', 'with-owl', 'new-cancel']) expect(await pane.find({ key })).toBeDefined()
     await pane.unmount()
   }
 })

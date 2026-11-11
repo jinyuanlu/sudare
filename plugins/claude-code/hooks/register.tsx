@@ -37,6 +37,9 @@ const pictures = new Map<string, string | null>()
 const pictureTick = atom({ plugin: 'sudare', key: 'pictureTick' } as const, 0)
 const PICTURES_KEPT = 24
 
+// What the plugin is in the middle of doing for the person, said in the panel while it lasts.
+const working = atom({ plugin: 'sudare', key: 'working' } as const, null as string | null)
+
 // The room the person pressed Leave on and has not yet confirmed.
 const leaving = atom({ plugin: 'sudare', key: 'leaving' } as const, null as string | null)
 
@@ -338,8 +341,10 @@ async function uploadFiles($: Engine, c: Client, conv: string, paths: string[]):
  * tool: a terminal has no way to hand a pasted picture to a text field. Returns the file,
  * or why there is none.
  */
+let system: string | null = null // asked once: it does not change
 async function clipboardPicture($: Engine): Promise<{ path: string } | { problem: string }> {
-  const os = await $.process.run(['uname', '-s'], { timeoutMs: 5000 }).then((r) => r.stdout.trim(), () => '')
+  system ??= await $.process.run(['uname', '-s'], { timeoutMs: 5000 }).then((r) => r.stdout.trim(), () => '')
+  const os = system
   const dir = ((await $.env.get('TMPDIR').catch(() => undefined)) ?? '/tmp').replace(/\/+$/, '')
   const path = `${dir}/sudare-clipboard-${newId()}.png`
   if (os === 'Darwin') {
@@ -362,15 +367,24 @@ async function clipboardPicture($: Engine): Promise<{ path: string } | { problem
 
 /** Paste picture: whatever picture is on the clipboard goes to the room on screen, to one person or to everyone. */
 async function pastePicture($: Engine, c: Client, conv: string, picked: string | null): Promise<void> {
-  const clip = await clipboardPicture($)
-  if ('problem' in clip) return void (await say($, clip.problem))
-  const up = await uploadFiles($, c, conv, [clip.path])
-  if (clip.path.includes('/sudare-clipboard-')) await $.process.run(['rm', '-f', clip.path], { timeoutMs: 5000 }).catch(() => undefined)
-  if (up.problem) return void (await say($, up.problem))
-  const r = await c.api('POST', `/convs/${conv}/messages`, { id: newId(), text: '', images: up.images, ...(picked ? { to_handles: [picked] } : {}) })
-  if (r.ok) $.ui.toast('Sent the picture.')
-  else await say($, `Not sent: ${why(r)}`)
-  await refresh($, c)
+  if (await read($, working)) return // one at a time: a second press while it is going does nothing
+  // Each step is said in the panel as it starts, so a press is never met with silence.
+  await update($, working, () => 'Reading the picture from your clipboard…')
+  try {
+    const clip = await clipboardPicture($)
+    if ('problem' in clip) return void (await say($, clip.problem))
+    await update($, working, () => 'Uploading the picture…')
+    const up = await uploadFiles($, c, conv, [clip.path])
+    if (clip.path.includes('/sudare-clipboard-')) void $.process.run(['rm', '-f', clip.path], { timeoutMs: 5000 }).catch(() => undefined)
+    if (up.problem) return void (await say($, up.problem))
+    await update($, working, () => 'Sending…')
+    const r = await c.api('POST', `/convs/${conv}/messages`, { id: newId(), text: '', images: up.images, ...(picked ? { to_handles: [picked] } : {}) })
+    if (!r.ok) return void (await say($, `Not sent: ${why(r)}`))
+    $.ui.toast('Picture sent.')
+    await refresh($, c)
+  } finally {
+    await update($, working, () => null)
+  }
 }
 
 async function sayHere($: Engine, c: Client, conv: string, text: string, picked: string | null): Promise<void> {
@@ -378,7 +392,9 @@ async function sayHere($: Engine, c: Client, conv: string, text: string, picked:
   const found = picturePaths(text.trim())
   const body = found.rest
   if (body === '' && found.paths.length === 0) return
+  if (found.paths.length > 0) await update($, working, () => 'Uploading the picture…')
   const up = await uploadFiles($, c, conv, found.paths)
+  if (found.paths.length > 0) await update($, working, () => null)
   if (up.problem) return void (await say($, up.problem))
   // A typed @name counts even when it is lower-case or only the start of a name, as long as it is unambiguous.
   const names = ((await read($, timeline))?.others ?? []).map((o) => o.handle)
@@ -430,15 +446,6 @@ async function signInFor($: Engine, server: string, always: boolean, isKeeping: 
 async function closeHelp($: Engine): Promise<void> {
   await update($, helpOpen, () => false)
   await $.store.set('helpSeen', true).catch(() => undefined)
-}
-
-/** The private chat with one person from this conversation: opened if it exists, created if not. */
-async function openPrivate($: Engine, c: Client, conv: string, person: SudarePerson): Promise<void> {
-  const r = await c.api('POST', '/convs', { topic: `@${person.handle}`, members: [{ conv, alias: person.alias }], dm: true })
-  const made = str((r.body as Json).conv)
-  if (!r.ok || made === '') return void (await say($, `Could not open a private chat: ${why(r)}.`))
-  await update($, target, () => null)
-  await openConv($, c, made)
 }
 
 /** The room's link, copied to the clipboard: one link for everyone you want here. */
@@ -746,6 +753,7 @@ export const register: Register = (on, options) => {
     const to = await read($, target)
     const [form, isHelp, asked] = [await read($, compose), await read($, helpOpen), await read($, leaving)]
     const isLeaving = shown !== null && asked === shown.conv
+    const busy = await read($, working)
     const picked = shown?.others.find((o) => o.handle === to) ?? null
     const askable = shown && !shown.isArchived ? shown.lines.filter((l) => !l.isMine && l.via !== 'note').slice(-3).map((l) => l.id) : []
     if (isIn && shown && (snap.convs.find((x) => x.id === shown.conv)?.unread ?? 0) > 0) void markSeen($, c).catch(() => undefined)
@@ -819,18 +827,17 @@ export const register: Register = (on, options) => {
         {shown && shown.isArchived && <Text dimColor>This room is archived. You can still read it; nobody can write in it.</Text>}
         {shown && !shown.isArchived && shown.others.length > 1 && (
           <Box gap={2} flexWrap="wrap">
-            <Text dimColor>To</Text>
+            <Text dimColor>Mention</Text>
             <Button key="to-all" {...(to === null ? { variant: 'primary' as const } : {})} label="Everyone" onPress={() => update($, target, () => null)} />
             {shown.others.map((o) => (
               <Button key={`to-${o.handle}`} {...(to === o.handle ? { variant: 'primary' as const } : {})} label={`${o.isHere ? '● ' : '○ '}${o.handle}`} onPress={() => update($, target, () => o.handle)} />
             ))}
-            {picked && <Button key="private" label="Private chat" onPress={() => openPrivate($, c, shown.conv, picked)} />}
           </Box>
         )}
         {shown && !shown.isArchived && (
           <Box borderStyle="round" borderColor="suggestion" paddingX={1} flexDirection="column">
             <Input key={`say-${shown.conv}`} label="Message" submitLabel="Send"
-              placeholder={picked ? `Type here, for ${picked.handle} (all can read)` : shown.others.length > 1 ? 'Type here, to everyone' : shown.others.length === 1 ? `Type here, to ${shown.others[0]!.handle}` : 'Type here'}
+              placeholder={picked ? `Type here. Everyone in the room reads it; ${picked.handle} is notified` : shown.others.length > 1 ? 'Type here, to everyone' : shown.others.length === 1 ? `Type here, to ${shown.others[0]!.handle}` : 'Type here'}
               onSubmit={(text) => void sayHere($, c, shown.conv, text, picked?.handle ?? null)} />
           </Box>
         )}
@@ -880,6 +887,7 @@ export const register: Register = (on, options) => {
             <Button key="new-cancel" label="Cancel" onPress={() => update($, compose, () => ({ isOpen: false, people: [] }))} />
           </Box>
         )}
+        {busy && <Text color="warning">⏳ {busy}</Text>}
         {shown && isLeaving && (
           <Box gap={2} flexWrap="wrap">
             <Text>Leave "{clip(shown.topic, 40)}"? You stop receiving it and need a new invitation to come back.</Text>
@@ -888,7 +896,7 @@ export const register: Register = (on, options) => {
           </Box>
         )}
         <Box gap={2} flexWrap="wrap">
-          {shown && !shown.isArchived && <Button key="paste-picture" label="Paste picture" onPress={() => pastePicture($, c, shown.conv, picked?.handle ?? null)} />}
+          {shown && !shown.isArchived && <Button key="paste-picture" label={busy ? 'Sending picture…' : 'Paste picture'} onPress={() => pastePicture($, c, shown.conv, picked?.handle ?? null)} />}
           {shown && shown.canInvite && <Button key="invite" label="Invite" onPress={() => inviteLink($, c, shown.conv, e.surface)} />}
           {shown && !form.isOpen && <Button key="new" label="New room" onPress={() => update($, compose, () => ({ isOpen: true, people: shown.others.map((o) => o.handle) }))} />}
           {shown && !isLeaving && <Button key="leave" label="Leave" onPress={() => update($, leaving, () => shown.conv)} />}

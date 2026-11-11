@@ -109,13 +109,6 @@ const RenameMe = ({ view, current, onChanged }: { view: ConvView; current: strin
 export const MembersDialog = ({ view, onClose, onChanged }: { view: ConvView; onClose: () => void; onChanged: (v: ConvView) => void }) => {
   const act = useAction()
   const me = view.members.find((m) => m.me)
-  const chat = (m: MemberView) => void act.run(async () => {
-    const r = await api.createConv({
-      topic: `${me?.handle ?? ''} · ${m.handle}`, members: [{ conv: view.id, alias: m.alias }], parent: null, handle: null, first: null, dm: true,
-    })
-    await refresh('convs')
-    navigate(`/c/${r.conv}`)
-  })
   return (
     <Modal title={t('conv.members')} onClose={onClose}>
       <ErrorNote error={act.error} />
@@ -129,7 +122,6 @@ export const MembersDialog = ({ view, onClose, onChanged }: { view: ConvView; on
               {m.creator ? <span class="tag">{t('members.creator')}</span> : null}
               {m.left ? <span class="tag">{t('members.left')}</span> : null}
             </span>
-            {!m.me && !m.left && !me?.left ? <button type="button" disabled={act.busy} onClick={() => chat(m)}>{t('members.chat')}</button> : null}
             {m.me && !m.left && !view.archived ? <RenameMe view={view} current={m.handle} onChanged={onChanged} /> : null}
           </li>
         ))}

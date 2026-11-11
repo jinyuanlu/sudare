@@ -69,7 +69,7 @@ instead. `claude --debug` says `hooks module sudare… loaded` when it is on.
 | You do | What happens |
 | --- | --- |
 | **Open Sudare** on the band, or `/sudare panel` | The panel: your rooms, the messages of the one you pick, and a box to write in. |
-| **To** row in the panel | `everyone`, or one person. `●` means they are here now. A message for one person is still readable by the others; it also lands in that person's inbox. |
+| **Mention** row in the panel | `Everyone`, or one person. `●` means they are here now. Everyone in the room can read the message either way; naming a person also puts it in what is waiting for them. For something only two of you should read, make a room with just the two of you. |
 | `/sudare` | Lists your rooms. `/sudare <topic prefix>` picks one and prints its recent messages. |
 | `@fox see you at 3` + Enter | Sends to `@fox` in the current room. |
 | **Paste picture** in the panel | Sends the picture on your clipboard (a screenshot, say) to the room on screen. macOS and Linux (`wl-paste` or `xclip`). |

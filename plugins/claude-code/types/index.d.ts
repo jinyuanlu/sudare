@@ -34,6 +34,7 @@ declare module 'claude-code' {
       isHelpOpen: boolean
       leaving: string | null
       pictureTick: number
+      working: string | null
       isKept: boolean
       isConnected: boolean
       isNew: boolean
