@@ -48,6 +48,26 @@ async function showWhole($: Engine, text: string, width: number): Promise<void> 
   if ((await read($, overflow)) !== whole) await update($, overflow, () => whole)
 }
 
+// A picture in the panel is a thumbnail: it fits a small box whole, keeping its shape, and never
+// crowds out the messages around it. A terminal cell is about twice as tall as it is wide.
+const PICTURE_COLUMNS = 36
+const PICTURE_ROWS = 8
+const pictureBox = (w: number, h: number, widest: number): { columns: number; rows: number } => {
+  const shape = Math.max(1, w) / Math.max(1, h) // width over height, in pixels
+  const columns = Math.max(4, Math.min(PICTURE_COLUMNS, widest))
+  const rows = Math.max(1, Math.round(columns / shape / 2))
+  return rows <= PICTURE_ROWS ? { columns, rows } : { columns: Math.max(2, Math.round(PICTURE_ROWS * 2 * shape)), rows: PICTURE_ROWS }
+}
+/** The lines a message takes in the panel: its text, and the box of each picture it carries. */
+const heightOf = (l: SudareLine, wide: number): number =>
+  1 + (l.images ?? []).reduce((n, i) => n + pictureBox(i.w, i.h, wide).rows, 0)
+/** The latest messages that fit in `room` lines, pictures counted at their drawn height. Always at least one. */
+const fitting = (lines: SudareLine[], room: number, wide: number): SudareLine[] => {
+  let [used, from] = [0, lines.length]
+  while (from > 0 && (used + heightOf(lines[from - 1]!, wide) <= room || from === lines.length)) used += heightOf(lines[--from]!, wide)
+  return lines.slice(from)
+}
+
 // What the plugin is in the middle of doing for the person, said in the panel while it lasts.
 const working = atom({ plugin: 'sudare', key: 'working' } as const, null as string | null)
 
@@ -807,7 +827,7 @@ export const register: Register = (on, options) => {
             </Text>
             {shown.others.length === 0 && <Text>Only you here. Press Invite.</Text>}
             {shown.others.length > 0 && shown.lines.length === 0 && <Text dimColor>No messages yet.</Text>}
-            {shown.lines.slice(-Math.max(3, room - (whole === '' ? 0 : Math.ceil(columnsOf(whole) / Math.max(10, wide)) + 1))).map((l) => {
+            {fitting(shown.lines, Math.max(3, room - (whole === '' ? 0 : Math.ceil(columnsOf(whole) / Math.max(10, wide)) + 1)), wide).map((l) => {
               const words = (
                 <Text>
                   <Text bold={!l.isMine} dimColor={l.isMine}>{l.isMine ? 'you' : l.from}</Text>
@@ -821,8 +841,7 @@ export const register: Register = (on, options) => {
                   {words}
                   {l.images.map((i) => {
                     const png = pictures.get(i.id)
-                    const columns = Math.max(8, Math.min(wide, 64, i.w))
-                    const rows = Math.max(1, Math.min(18, Math.round((columns * i.h) / Math.max(1, i.w) / 2)))
+                    const { columns, rows } = pictureBox(i.w, i.h, wide)
                     return Picture && png
                       ? <Picture key={`pic-${i.id}`} source={{ png }} columns={columns} rows={rows} alt={`[picture from ${l.isMine ? 'you' : l.from}]`} />
                       : <Text dimColor>{png === undefined && Picture ? '[picture, loading]' : '[picture: press Web to see it]'}</Text>
