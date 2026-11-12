@@ -35,6 +35,7 @@ declare module 'claude-code' {
       leaving: string | null
       pictureTick: number
       working: string | null
+      loadProblem: string | null
       overflow: string
       isKept: boolean
       isConnected: boolean

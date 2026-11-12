@@ -10,7 +10,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { SudareConv, SudareDraft, SudareInvite, SudareItem, SudareLine, SudareLink, SudarePerson, SudareSeat, SudareSnapshot, SudareTimeline } from '../types'
-import { isSignedIn, keepsSignIn, makeClient, type Client, type Json } from './client'
+import { isSignedIn, keepsSignIn, makeClient, type Client, type Json, type Reply } from './client'
 import { picturePaths } from './paths'
 import { enterReadonly, isOwnCall, isPluginOnlyTool, leaveReadonly, refusal } from './guard'
 
@@ -72,6 +72,9 @@ const fitting = (lines: SudareLine[], room: number, wide: number): SudareLine[] 
 // What the plugin is in the middle of doing for the person, said in the panel while it lasts.
 const working = atom({ plugin: 'sudare', key: 'working' } as const, null as string | null)
 
+// Why the last refresh could not load the lists, while that lasts.
+const loadProblem = atom({ plugin: 'sudare', key: 'loadProblem' } as const, null as string | null)
+
 // The room the person pressed Leave on and has not yet confirmed.
 const leaving = atom({ plugin: 'sudare', key: 'leaving' } as const, null as string | null)
 
@@ -97,11 +100,13 @@ const draftKind = (target: unknown): string => {
 }
 
 /** Pulls the lists the band and pane show. One round trip each; the server is the source of truth. */
-const load = async (c: Client): Promise<SudareSnapshot | null> => {
-  const [convs, inbox, drafts, invites, seats] = await Promise.all(
-    ['/convs', '/inbox', '/drafts', '/invites', '/seats'].map((path) => c.api('GET', path)),
-  )
-  if (![convs, inbox, drafts, invites, seats].every((r) => r?.ok)) return null
+const LISTS = ['/convs', '/inbox', '/drafts', '/invites', '/seats'] as const
+const load = async (c: Client): Promise<SudareSnapshot | { problem: string }> => {
+  const answers = await Promise.all(LISTS.map((path) => c.api('GET', path).catch((e: unknown): Reply => ({ ok: false, status: 0, body: { error: e instanceof Error ? e.message : 'no answer' } }))))
+  const [convs, inbox, drafts, invites, seats] = answers
+  // One list that did not load is said, by name, rather than shown as "you have nothing".
+  const failed = answers.findIndex((r) => !r.ok)
+  if (failed >= 0) return { problem: `${LISTS[failed]!.slice(1)}: ${answers[failed]!.status === 0 ? str((answers[failed]!.body as Json).error) || 'no answer' : `${answers[failed]!.status} ${str((answers[failed]!.body as Json).error)}`.trim()}` }
   return {
     convs: list(convs!.body).map((x): SudareConv => ({ id: str(x.id), topic: str(x.dm_with) || str(x.topic), unread: num(x.unread), pending: num(x.pending), round: str(x.round) || null })),
     inbox: list(inbox!.body).map((x): SudareItem => ({ msg: str(x.msg), conv: str(x.conv), topic: str(x.topic), from: str(x.from), text: str(x.text), state: str(x.state) })),
@@ -173,11 +178,17 @@ function say($: Engine, text: string) {
 }
 
 async function refresh($: Engine, c: Client, isSeen = false): Promise<void> {
-  const next = isSignedIn() ? await load(c) : null
+  const got = isSignedIn() ? await load(c) : null
+  const next = got && !('problem' in got) ? got : null
   await update($, signedIn, () => isSignedIn())
-  await update($, snapshot, () => next ?? EMPTY)
+  // A refresh that failed keeps what was on screen and says so; only signing out empties the lists.
+  if (next || !isSignedIn()) await update($, snapshot, () => next ?? EMPTY)
+  const problem = got && 'problem' in got && isSignedIn() ? got.problem : null
+  if ((await read($, loadProblem)) !== problem) await update($, loadProblem, () => problem)
+  const rooms = (next ?? (await read($, snapshot))).convs
   const picked = await read($, current)
-  const here = picked ?? next?.convs[0]?.id ?? null
+  // A room this person is no longer in cannot stay the one on screen.
+  const here = (picked && (!next || rooms.some((x) => x.id === picked)) ? picked : rooms[0]?.id) ?? null
   if (here !== picked) await update($, current, () => here)
   const shown = here && isSignedIn() ? await loadTimeline(c, here, isSeen).catch(() => null) : null
   await update($, timeline, () => shown)
@@ -798,6 +809,7 @@ export const register: Register = (on, options) => {
     const [form, isHelp, asked] = [await read($, compose), await read($, helpOpen), await read($, leaving)]
     const isLeaving = shown !== null && asked === shown.conv
     const busy = await read($, working)
+    const trouble = await read($, loadProblem)
     const whole = String((await read($, overflow)) ?? '')
     // The panel holds `bodyRows` rows before it has to scroll. Show as many of the latest messages as
     // leave the box to write in and the buttons on screen, so opening it never lands above them.
@@ -836,7 +848,8 @@ export const register: Register = (on, options) => {
             <Button key="clear-link" label="OK" onPress={() => update($, notice, () => null)} />
           </Box>
         )}
-        {snap.convs.length === 0 && <Text dimColor>No rooms yet. Join one with an invitation link.</Text>}
+        {snap.convs.length === 0 && !trouble && <Text dimColor>No rooms yet. Join one with an invitation link.</Text>}
+        {trouble && <Text color="warning">{snap.convs.length === 0 ? 'Could not load your rooms' : 'Not up to date'} ({trouble}). Trying again every few seconds; your rooms are safe on the server.</Text>}
         {shown && (
           <Box flexDirection="column">
             <Text>
