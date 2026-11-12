@@ -248,6 +248,20 @@ api.get('/sync', anyHuman, async (c) => {
   return c.json(await inbox(c).sync(since))
 })
 
+/** The five lists a client shows, in one request. The separate routes remain for clients that want one of them. */
+api.get('/snapshot', anyHuman, async (c) => {
+  const [lists, self, devices] = await Promise.all([inbox(c).lists(), directory(c.env).principal(me(c)), directory(c.env).devices(me(c))])
+  const priv = await directory(c.env).privateChats(me(c), lists.convs.map((x) => x.id))
+  const names = new Map(devices.map((d) => [d.id as string, d.name]))
+  return c.json({
+    convs: lists.convs.map((x) => ({ ...x, dm_with: priv.get(x.id) ?? null })),
+    inbox: lists.inbox,
+    drafts: lists.drafts.map((d) => ({ ...d, device_name: names.get(d.device) ?? 'revoked device' })),
+    invites: lists.invites.map((i) => ({ ...i, suggested_handle: self?.default_handle ?? null })),
+    seats: lists.seats,
+  })
+})
+
 api.get('/ws', anyHuman, async (c) => {
   if (c.get('session').via === 'cookie' && !sameOrigin(c)) return fail('forbidden_scope', 'origin')
   return principalSocket(c.env, me(c), c.req.raw)

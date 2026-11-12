@@ -101,12 +101,21 @@ const draftKind = (target: unknown): string => {
 
 /** Pulls the lists the band and pane show. One round trip each; the server is the source of truth. */
 const LISTS = ['/convs', '/inbox', '/drafts', '/invites', '/seats'] as const
+let hasSnapshot = true // until a server says it has no such route
 const load = async (c: Client): Promise<SudareSnapshot | { problem: string }> => {
-  const answers = await Promise.all(LISTS.map((path) => c.api('GET', path).catch((e: unknown): Reply => ({ ok: false, status: 0, body: { error: e instanceof Error ? e.message : 'no answer' } }))))
+  const failed0 = (e: unknown): Reply => ({ ok: false, status: 0, body: { error: e instanceof Error ? e.message : 'no answer' } })
+  // One request where the server has /snapshot; the five separate lists where it does not (an older server).
+  const one = hasSnapshot ? await c.api('GET', '/snapshot').catch(failed0) : null
+  if (one && one.status === 404) hasSnapshot = false
+  const whole = one?.ok ? (one.body as Json) : null
+  const answers: Reply[] = whole
+    ? LISTS.map((path) => ({ ok: true, status: 200, body: whole[path.slice(1)] as Json[] }))
+    : one && one.status !== 404 ? [one, one, one, one, one]
+    : await Promise.all(LISTS.map((path) => c.api('GET', path).catch(failed0)))
   const [convs, inbox, drafts, invites, seats] = answers
   // One list that did not load is said, by name, rather than shown as "you have nothing".
   const failed = answers.findIndex((r) => !r.ok)
-  if (failed >= 0) return { problem: `${LISTS[failed]!.slice(1)}: ${answers[failed]!.status === 0 ? str((answers[failed]!.body as Json).error) || 'no answer' : `${answers[failed]!.status} ${str((answers[failed]!.body as Json).error)}`.trim()}` }
+  if (failed >= 0) return { problem: `${whole || !one || one.status === 404 ? LISTS[failed]!.slice(1) : 'snapshot'}: ${answers[failed]!.status === 0 ? str((answers[failed]!.body as Json).error) || 'no answer' : `${answers[failed]!.status} ${str((answers[failed]!.body as Json).error)}`.trim()}` }
   return {
     convs: list(convs!.body).map((x): SudareConv => ({ id: str(x.id), topic: str(x.dm_with) || str(x.topic), unread: num(x.unread), pending: num(x.pending), round: str(x.round) || null })),
     inbox: list(inbox!.body).map((x): SudareItem => ({ msg: str(x.msg), conv: str(x.conv), topic: str(x.topic), from: str(x.from), text: str(x.text), state: str(x.state) })),
@@ -178,6 +187,8 @@ function say($: Engine, text: string) {
 }
 
 async function refresh($: Engine, c: Client, isSeen = false): Promise<void> {
+  lastLoaded = Date.now()
+  if (isSeen) lastMoved = lastLoaded // the person is looking: keep up with them
   const got = isSignedIn() ? await load(c) : null
   const next = got && !('problem' in got) ? got : null
   await update($, signedIn, () => isSignedIn())
@@ -211,18 +222,45 @@ async function cancelSignIn($: Engine): Promise<void> {
   await update($, notice, () => null)
 }
 
+// How often to ask the server "anything new?". Every question is a request the server's operator
+// pays for, and most of the time the answer is no: so ask often only while something is happening.
+//   something happened in the last 2 minutes   every 10 s
+//   in the last 15 minutes                      every 30 s
+//   longer ago                                  every 60 s
+// The lists are fetched again only when the answer was yes, and otherwise every 5 minutes, which is
+// what keeps "who is here" roughly true. While signed out, the agent connection is checked once a minute.
+const SECOND = 1000
+let lastMoved = 0 // when something last happened here: a message arrived, or the person did something
+let lastAsked = 0
+let lastLoaded = 0
+let lastProbed = 0
+const started = Date.now()
+const pollEvery = (now: number): number => (now - lastMoved < 120 * SECOND ? 10 : now - lastMoved < 900 * SECOND ? 30 : 60) * SECOND
+
 async function tick($: Engine, c: Client): Promise<void> {
+  const now = Date.now()
   if (!isSignedIn()) {
+    // Setting up: the line should move on within seconds of the agent being connected. That is worth
+    // asking often for the first few minutes; after that, and once it is connected, once a minute or less.
+    const isConnected = await read($, connected)
+    const every = isConnected ? 300 : now - started < 300 * SECOND ? 10 : 60
+    if (now - lastProbed < every * SECOND - SECOND) return
+    lastProbed = now
     await probe($, c)
     return void (await update($, signedIn, () => false))
   }
+  if (now - lastAsked < pollEvery(now) - SECOND) return
+  lastAsked = now
   const r = await c.api('GET', `/sync?since=${cursor}`)
-  if (!r.ok) return refresh($, c)
+  if (!r.ok) {
+    lastMoved = 0 // the server is refusing or unreachable: ask at the slowest pace until it answers
+    return refresh($, c)
+  }
   const body = r.body as { cursor?: number; events?: unknown[] }
   const moved = (body.events?.length ?? 0) > 0
   cursor = body.cursor ?? cursor
-  ticks += 1
-  if (moved || ticks % 3 === 0) await refresh($, c) // every 30 s regardless: who is here changes without an event
+  if (moved) lastMoved = now
+  if (moved || now - lastLoaded > 300 * SECOND) await refresh($, c)
 }
 
 async function signIn($: Engine, c: Client, allowHuman: boolean): Promise<string> {
@@ -286,6 +324,7 @@ function newId(): string {
 }
 
 async function post($: Engine, c: Client, path: string, body: Json, done: string): Promise<boolean> {
+  lastMoved = Date.now()
   const r = await c.api('POST', path, body)
   // Good news is a passing toast; only a problem stays on the band until dismissed.
   if (r.ok) $.ui.toast(done)
@@ -446,6 +485,7 @@ async function pastePicture($: Engine, c: Client, conv: string, picked: string |
 
 async function sayHere($: Engine, c: Client, conv: string, text: string, picked: string | null): Promise<void> {
   // A picture pasted into this box arrives as a file's path: send the picture, not its name.
+  lastMoved = Date.now()
   const found = picturePaths(text.trim())
   const body = found.rest
   if (body === '' && found.paths.length === 0) return

@@ -547,6 +547,12 @@ export class PrincipalDO extends DurableObject<Env> {
     if (changed) this.announce(false)
   }
 
+  /** Everything a client lists, in one call: a client that polls should cost one request, not five. */
+  async lists(): Promise<{ convs: ConvSummary[]; inbox: InboxItem[]; drafts: DraftView[]; invites: Omit<InviteView, 'suggested_handle'>[]; seats: SeatView[] }> {
+    const [convs, inbox, drafts, invites, seats] = await Promise.all([this.convs(), this.inbox(false), this.drafts(true), this.invites(), this.seats()])
+    return { convs, inbox, drafts, invites, seats }
+  }
+
   async seats(): Promise<SeatView[]> {
     return this.all<RoundRow & { topic: string }>(
       `SELECT r.*, coalesce(c.topic, '') AS topic FROM rounds r LEFT JOIN convs c ON c.conv = r.conv WHERE r.joined = 1 AND r.closed = 0`,

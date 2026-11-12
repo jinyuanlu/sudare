@@ -435,3 +435,20 @@ describe('pictures in messages', () => {
     }
   })
 })
+
+describe('one request for a polling client', () => {
+  it('/snapshot is the five lists, exactly as the five routes give them', async () => {
+    const { who: ann, conv } = await founder()
+    const bob = await invite(ann, conv, 'bob')
+    await ann.send(conv, 'for bob', { to_handles: ['bob'] })
+    await ann.post(`/convs/${conv}/invites`, { room: true })
+    const agent = await agentFor(bob)
+    await bob.post(`/inbox/${(await bob.get('/inbox')).body[0].msg}/handoff`)
+    await agent.tool('claim', { msg: (await agent.tool('inbox')).data.messages[0].msg })
+    await agent.tool('draft', { conv, text: 'a draft', to: ['ann'] })
+    const snap = (await bob.get('/snapshot')).body
+    for (const k of ['convs', 'inbox', 'drafts', 'invites', 'seats']) expect(snap[k], k).toEqual((await bob.get(`/${k}`)).body)
+    expect([snap.convs.length, snap.inbox.length, snap.drafts.length]).toEqual([1, 1, 1])
+    expect((await raw('/api/snapshot')).status).toBe(401)
+  })
+})
