@@ -11,7 +11,7 @@
   "dependencies": {
     "@simplewebauthn/browser": "^14.0.0",
     "@sudare/protocol": "workspace:*",
-    "preact": "^10.27.0"
+    "preact": "^11.2.0"
   },
   "devDependencies": {
     "@preact/preset-vite": "^2.10.0",
