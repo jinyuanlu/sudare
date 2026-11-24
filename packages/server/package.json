@@ -16,7 +16,7 @@
     "@modelcontextprotocol/sdk": "^1.32.2",
     "@simplewebauthn/server": "^14.1.0",
     "@sudare/protocol": "workspace:*",
-    "hono": "^4.13.17",
+    "hono": "^4.13.19",
     "zod": "^4.6.7"
   },
   "devDependencies": {
